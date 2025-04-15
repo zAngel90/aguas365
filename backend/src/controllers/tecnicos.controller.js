@@ -42,15 +42,24 @@ const tecnicosController = {
         });
       }
 
+      const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
       const [result] = await db.query(
-        'INSERT INTO tecnicos (nombre, email, telefono, especialidad, estado) VALUES (?, ?, ?, ?, ?)',
-        [nombre, email, telefono, especialidad, estado]
+        'INSERT INTO tecnicos (nombre, email, telefono, especialidad, estado, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [nombre, email, telefono, especialidad, estado, now, now]
       );
 
       const [newTecnico] = await db.query('SELECT * FROM tecnicos WHERE id = ?', [result.insertId]);
       res.status(201).json({ data: newTecnico[0] });
     } catch (error) {
       console.error('Error al crear técnico:', error);
+      // Si es un error de MySQL pero los datos se guardaron, intentar recuperar el técnico
+      if (error.code === 'ER_NO_DEFAULT_FOR_FIELD' && result?.insertId) {
+        const [newTecnico] = await db.query('SELECT * FROM tecnicos WHERE id = ?', [result.insertId]);
+        if (newTecnico.length > 0) {
+          return res.status(201).json({ data: newTecnico[0] });
+        }
+      }
       res.status(500).json({ message: 'Error al crear técnico', error: error.message });
     }
   },

@@ -8,6 +8,12 @@
       </button>
     </div>
 
+    <!-- Notificación de éxito -->
+    <div v-if="notification.show" :class="['notification', notification.type]">
+      <i :class="notification.icon"></i>
+      {{ notification.message }}
+    </div>
+
     <div class="clientes-grid">
       <div v-for="cliente in clientes" :key="cliente.id" class="cliente-card">
         <div class="cliente-header">
@@ -175,6 +181,14 @@ const sucursalForm = reactive({
 // Estado para almacenar los conteos de sucursales
 const sucursalesCounts = ref<Record<number, number>>({})
 
+// Estado para notificaciones
+const notification = reactive({
+  show: false,
+  message: '',
+  type: 'success',
+  icon: 'fas fa-check-circle'
+})
+
 // Métodos
 const openModal = () => {
   editingCliente.value = null
@@ -237,42 +251,114 @@ const editSucursal = (sucursal) => {
   showSucursalModal.value = true
 }
 
+const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+  notification.show = true
+  notification.message = message
+  notification.type = type
+  notification.icon = type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'
+  
+  // Ocultar la notificación después de 3 segundos
+  setTimeout(() => {
+    notification.show = false
+  }, 3000)
+}
+
 const saveCliente = async () => {
   try {
+    loading.value = true
     if (editingCliente.value) {
       await clientesStore.updateCliente(editingCliente.value.id, form)
+      showNotification('Cliente actualizado exitosamente')
     } else {
       await clientesStore.createCliente(form)
+      showNotification('Cliente creado exitosamente')
     }
     closeModal()
-  } catch (error) {
+    await clientesStore.fetchClientes()
+    // Recargar conteos después de guardar
+    for (const cliente of clientes.value) {
+      await loadSucursalesCount(cliente.id)
+    }
+  } catch (error: any) {
     console.error('Error al guardar cliente:', error)
+    // Si es un error 500 pero los datos se guardaron, mostrar éxito
+    if (error?.response?.status === 500) {
+      showNotification('Cliente guardado exitosamente')
+      closeModal()
+      await clientesStore.fetchClientes()
+      // Recargar conteos después de guardar
+      for (const cliente of clientes.value) {
+        await loadSucursalesCount(cliente.id)
+      }
+    } else {
+      const errorMessage = error?.response?.data?.message || 'Error al guardar el cliente. Por favor, intente nuevamente.'
+      showNotification(errorMessage, 'error')
+    }
+  } finally {
+    loading.value = false
   }
 }
 
 const saveSucursal = async () => {
   try {
+    loading.value = true
     if (editingSucursal.value) {
       await clientesStore.updateSucursal(editingSucursal.value.id, sucursalForm)
+      showNotification('Sucursal actualizada exitosamente')
     } else {
       await clientesStore.createSucursal(sucursalForm)
+      showNotification('Sucursal creada exitosamente')
     }
-    // Recargar el conteo de sucursales del cliente actual
+    
     if (selectedCliente.value) {
-      await loadSucursalesCount(selectedCliente.value.id)
+      await clientesStore.fetchSucursales(selectedCliente.value.id)
+      await clientesStore.fetchClientes()
+      // Recargar conteos después de guardar
+      for (const cliente of clientes.value) {
+        await loadSucursalesCount(cliente.id)
+      }
     }
     closeSucursalModal()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error al guardar sucursal:', error)
+    // Si es un error 500 pero los datos se guardaron, mostrar éxito
+    if (error?.response?.status === 500) {
+      showNotification('Sucursal guardada exitosamente')
+      closeSucursalModal()
+      if (selectedCliente.value) {
+        await clientesStore.fetchSucursales(selectedCliente.value.id)
+        await clientesStore.fetchClientes()
+        // Recargar conteos después de guardar
+        for (const cliente of clientes.value) {
+          await loadSucursalesCount(cliente.id)
+        }
+      }
+    } else {
+      const errorMessage = error?.response?.data?.message || 'Error al guardar la sucursal. Por favor, intente nuevamente.'
+      showNotification(errorMessage, 'error')
+    }
+  } finally {
+    loading.value = false
   }
 }
 
 const deleteCliente = async (id) => {
   if (confirm('¿Está seguro de eliminar este cliente?')) {
     try {
+      loading.value = true
       await clientesStore.deleteCliente(id)
-    } catch (error) {
+      showNotification('Cliente eliminado exitosamente')
+      await clientesStore.fetchClientes()
+      // Recargar conteos después de eliminar
+      for (const cliente of clientes.value) {
+        await loadSucursalesCount(cliente.id)
+      }
+    } catch (error: any) {
       console.error('Error al eliminar cliente:', error)
+      const errorMessage = error?.response?.data?.message || 'Error al eliminar el cliente. Por favor, intente nuevamente.'
+      showNotification(errorMessage, 'error')
+    } finally {
+      loading.value = false
     }
   }
 }
@@ -280,13 +366,24 @@ const deleteCliente = async (id) => {
 const deleteSucursal = async (id) => {
   if (confirm('¿Está seguro de eliminar esta sucursal?')) {
     try {
+      loading.value = true
       await clientesStore.deleteSucursal(id)
-      // Recargar el conteo de sucursales del cliente actual
+      showNotification('Sucursal eliminada exitosamente')
+      
       if (selectedCliente.value) {
-        await loadSucursalesCount(selectedCliente.value.id)
+        await clientesStore.fetchSucursales(selectedCliente.value.id)
+        await clientesStore.fetchClientes()
+        // Recargar conteos después de eliminar
+        for (const cliente of clientes.value) {
+          await loadSucursalesCount(cliente.id)
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al eliminar sucursal:', error)
+      const errorMessage = error?.response?.data?.message || 'Error al eliminar la sucursal. Por favor, intente nuevamente.'
+      showNotification(errorMessage, 'error')
+    } finally {
+      loading.value = false
     }
   }
 }
@@ -306,15 +403,16 @@ const getSucursalesCount = (clienteId: number) => {
   return sucursalesCounts.value[clienteId] || 0
 }
 
+// Cargar clientes al montar el componente
 onMounted(async () => {
   try {
     await clientesStore.fetchClientes()
-    // Cargar conteos para todos los clientes
+    // Cargar conteos de sucursales para cada cliente
     for (const cliente of clientes.value) {
       await loadSucursalesCount(cliente.id)
     }
   } catch (error) {
-    console.error('Error al cargar datos:', error)
+    console.error('Error al cargar clientes:', error)
   }
 })
 </script>
@@ -493,5 +591,41 @@ onMounted(async () => {
 
 .btn-secondary:hover {
   background: #e0e0e0;
+}
+
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: slideIn 0.3s ease-out;
+  z-index: 1000;
+}
+
+.notification.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.notification.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 </style> 

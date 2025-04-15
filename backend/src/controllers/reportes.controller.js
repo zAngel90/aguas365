@@ -60,16 +60,14 @@ const reportesController = {
     try {
       const [results] = await db.query(`
         SELECT 
+          c.id,
           c.nombre as cliente,
-          COUNT(DISTINCT CASE 
-            WHEN d.cliente_id IS NOT NULL THEN d.id
-            WHEN d.sucursal_id IS NOT NULL THEN d.id
-          END) as cantidad
+          COUNT(d.id) as cantidad
         FROM clientes c
         LEFT JOIN (
-          SELECT id, cliente_id, NULL as sucursal_id FROM dispensadores WHERE cliente_id IS NOT NULL
+          SELECT id, cliente_id FROM dispensadores WHERE cliente_id IS NOT NULL
           UNION ALL
-          SELECT d.id, s.cliente_id, d.sucursal_id 
+          SELECT d.id, s.cliente_id 
           FROM dispensadores d
           JOIN sucursales s ON d.sucursal_id = s.id
         ) d ON c.id = d.cliente_id
@@ -77,7 +75,7 @@ const reportesController = {
         ORDER BY cantidad DESC
       `)
       
-      res.json({ data: results })
+      res.json(results)
     } catch (error) {
       console.error('Error al obtener dispensadores por cliente:', error)
       res.status(500).json({ message: 'Error al obtener dispensadores por cliente' })
