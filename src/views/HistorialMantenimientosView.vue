@@ -3,19 +3,34 @@
     <div class="page-header">
       <h1>Historial de Mantenimientos</h1>
       <div class="filters">
-        <select v-model="filtroEstado" class="filter-select">
-          <option value="">Todos los estados</option>
-          <option value="completado">Completados</option>
-          <option value="en_proceso">En Proceso</option>
-          <option value="pendiente">Pendientes</option>
-          <option value="cancelado">Cancelados</option>
-        </select>
-        <select v-model="filtroTipo" class="filter-select">
-          <option value="">Todos los tipos</option>
-          <option value="preventivo">Preventivo</option>
-          <option value="correctivo">Correctivo</option>
-          <option value="emergencia">Emergencia</option>
-        </select>
+        <div class="filter-group">
+          <label>Cliente:</label>
+          <select v-model="filtroCliente" class="filter-select">
+            <option value="">Todos los clientes</option>
+            <option v-for="cliente in clientes" :key="cliente.id" :value="cliente.id">
+              {{ cliente.nombre }}
+            </option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Estado:</label>
+          <select v-model="filtroEstado" class="filter-select">
+            <option value="">Todos los estados</option>
+            <option value="completado">Completados</option>
+            <option value="en_proceso">En Proceso</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="cancelado">Cancelados</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Tipo:</label>
+          <select v-model="filtroTipo" class="filter-select">
+            <option value="">Todos los tipos</option>
+            <option value="preventivo">Preventivo</option>
+            <option value="correctivo">Correctivo</option>
+            <option value="emergencia">Emergencia</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -93,14 +108,18 @@
 <script setup lang="ts">
 import { onMounted, computed, ref } from 'vue'
 import { useMantenimientosStore } from '@/stores/mantenimientos.store'
+import { useClientesStore } from '@/stores/clientes.store'
 import { storeToRefs } from 'pinia'
 import type { Mantenimiento } from '@/interfaces/mantenimiento.interface'
 
 const mantenimientosStore = useMantenimientosStore()
+const clientesStore = useClientesStore()
 const { mantenimientos, loading, error } = storeToRefs(mantenimientosStore)
+const { clientes } = storeToRefs(clientesStore)
 
 const filtroEstado = ref('')
 const filtroTipo = ref('')
+const filtroCliente = ref('')
 
 const mantenimientosFiltrados = computed(() => {
   let resultado = mantenimientos.value || []
@@ -111,6 +130,10 @@ const mantenimientosFiltrados = computed(() => {
   
   if (filtroTipo.value) {
     resultado = resultado.filter(m => m.tipo === filtroTipo.value)
+  }
+
+  if (filtroCliente.value) {
+    resultado = resultado.filter(m => m.cliente?.id === Number(filtroCliente.value))
   }
   
   // Ordenar por fecha de realización (más reciente primero)
@@ -123,9 +146,12 @@ const mantenimientosFiltrados = computed(() => {
 
 onMounted(async () => {
   try {
-    await mantenimientosStore.fetchMantenimientos()
+    await Promise.all([
+      mantenimientosStore.fetchMantenimientos(),
+      clientesStore.fetchClientes()
+    ])
   } catch (error) {
-    console.error('Error al cargar mantenimientos:', error)
+    console.error('Error al cargar datos:', error)
   }
 })
 
@@ -166,8 +192,8 @@ const formatTipo = (tipo: string) => {
 .page-header {
   margin-bottom: 2rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .page-header h1 {
@@ -178,7 +204,21 @@ const formatTipo = (tipo: string) => {
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
 }
 
 .filter-select {
@@ -186,6 +226,14 @@ const formatTipo = (tipo: string) => {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 0.9rem;
+  min-width: 200px;
+  background-color: white;
+}
+
+.filter-select:focus {
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
 }
 
 .mantenimientos-grid {
