@@ -1,67 +1,122 @@
 <template>
-  <div class="calendario-container">
-    <div class="page-header">
-      <h1>Calendario de Mantenimientos</h1>
-      <div class="calendario-controls">
-        <button @click="mesAnterior" class="btn-control">
-          <i class="fas fa-chevron-left"></i>
-        </button>
-        <h2>{{ nombreMes }} {{ año }}</h2>
-        <button @click="mesSiguiente" class="btn-control">
-          <i class="fas fa-chevron-right"></i>
-        </button>
+  <div class="maintenance-list-container">
+    <div class="header">
+      <h1>Agenda de Mantenimientos</h1>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>Cliente</label>
+        <select v-model="filters.clienteId">
+          <option value="">Todos los clientes</option>
+          <option v-for="cliente in uniqueClients" 
+                  :key="cliente.id" 
+                  :value="cliente.id">
+            {{ cliente.nombre }}
+          </option>
+        </select>
       </div>
+
+      <div class="filter-group">
+        <label>Sucursal</label>
+        <select v-model="filters.sucursalId" 
+                :disabled="!filters.clienteId">
+          <option value="">Todas las sucursales</option>
+          <option v-for="sucursal in filteredBranches" 
+                  :key="sucursal.id" 
+                  :value="sucursal.id">
+            {{ sucursal.nombre }}
+          </option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>Tipo</label>
+        <select v-model="filters.tipo">
+          <option value="">Todos los tipos</option>
+          <option value="PREVENTIVO">Preventivo</option>
+          <option value="CORRECTIVO">Correctivo</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>Estado</label>
+        <select v-model="filters.estado">
+          <option value="">Todos los estados</option>
+          <option value="PENDIENTE">Pendiente</option>
+          <option value="EN_PROCESO">En proceso</option>
+          <option value="COMPLETADO">Completado</option>
+          <option value="CANCELADO">Cancelado</option>
+        </select>
+      </div>
+
+      <button class="clear-filters" @click="clearFilters">
+        <i class="fas fa-times"></i>
+        Limpiar filtros
+      </button>
     </div>
 
-    <!-- Notificación -->
-    <div v-if="notification.show" :class="['notification', notification.type]">
-      <i :class="notification.icon"></i>
-      {{ notification.message }}
-    </div>
-
-    <!-- Loading state -->
-    <div v-if="loading" class="loading-state">
-      <i class="fas fa-spinner fa-spin"></i>
-      Cargando mantenimientos...
-    </div>
-
-    <!-- Error state -->
-    <div v-if="error" class="error-state">
-      <i class="fas fa-exclamation-circle"></i>
-      {{ error }}
-    </div>
-
-    <!-- Calendario -->
-    <div v-if="!loading && !error" class="calendario">
-      <!-- Días de la semana -->
-      <div class="dias-semana">
-        <div v-for="dia in diasSemana" :key="dia" class="dia-header">
-          {{ dia }}
+    <!-- Resumen de filtros activos -->
+    <div v-if="hasActiveFilters" class="active-filters">
+      <span>Filtros activos:</span>
+      <div class="filter-tags">
+        <div v-if="filters.clienteId" class="filter-tag">
+          Cliente: {{ getClienteName(filters.clienteId) }}
+          <button @click="filters.clienteId = ''">×</button>
+        </div>
+        <div v-if="filters.sucursalId" class="filter-tag">
+          Sucursal: {{ getBranchName(filters.sucursalId) }}
+          <button @click="filters.sucursalId = ''">×</button>
+        </div>
+        <div v-if="filters.tipo" class="filter-tag">
+          Tipo: {{ filters.tipo }}
+          <button @click="filters.tipo = ''">×</button>
+        </div>
+        <div v-if="filters.estado" class="filter-tag">
+          Estado: {{ filters.estado }}
+          <button @click="filters.estado = ''">×</button>
         </div>
       </div>
+    </div>
 
-      <!-- Grid de días -->
-      <div class="dias-grid">
-        <div 
-          v-for="dia in diasDelMes" 
-          :key="dia.fecha"
-          :class="['dia-celda', { 
-            'otro-mes': !dia.esDelMesActual,
-            'hoy': dia.esHoy
-          }]"
-        >
-          <div class="dia-numero">{{ new Date(dia.fecha).getDate() }}</div>
-          
-          <!-- Mantenimientos del día -->
-          <div class="mantenimientos-dia">
-            <div 
-              v-for="mantenimiento in mantenimientosPorDia[dia.fecha]" 
-              :key="mantenimiento.id"
-              :class="['mantenimiento-item', mantenimiento.tipo.toLowerCase(), mantenimiento.estado.toLowerCase()]"
-              @click="mostrarDetalles(mantenimiento)"
-            >
-              <span class="hora">{{ formatearHora(mantenimiento.fechaProgramada) }}</span>
-              <span class="cliente">{{ mantenimiento.cliente?.nombre }}</span>
+    <div v-if="loading" class="loading">
+      <i class="fas fa-spinner fa-spin"></i>
+      <span>Cargando mantenimientos...</span>
+    </div>
+
+    <div v-else-if="error" class="error">
+      <i class="fas fa-exclamation-circle"></i>
+      <span>{{ error }}</span>
+    </div>
+
+    <div v-else-if="Object.keys(filteredMaintenances).length === 0" class="no-results">
+      <i class="fas fa-search"></i>
+      <p>No se encontraron mantenimientos con los filtros seleccionados</p>
+    </div>
+
+    <div v-else class="maintenance-groups">
+      <div v-for="(group, date) in filteredMaintenances" :key="date" class="date-group">
+        <div class="date-header">
+          <h2>{{ formatDateHeader(date) }}</h2>
+          <span class="count">{{ group.length }} mantenimiento(s)</span>
+        </div>
+
+        <div class="maintenance-cards">
+          <div 
+            v-for="maintenance in group" 
+            :key="maintenance.id"
+            :class="['maintenance-card', maintenance.tipo.toLowerCase(), maintenance.estado.toLowerCase()]"
+            @click="showDetails(maintenance)"
+          >
+            <div class="time">{{ formatTime(maintenance.fechaProgramada) }}</div>
+            <div class="main-info">
+              <div class="client">{{ maintenance.cliente?.nombre }}</div>
+              <div class="branch">{{ maintenance.sucursal?.nombre }}</div>
+            </div>
+            <div class="status-badges">
+              <span class="type-badge">{{ maintenance.tipo }}</span>
+              <span class="status-badge">{{ maintenance.estado }}</span>
             </div>
           </div>
         </div>
@@ -69,46 +124,42 @@
     </div>
 
     <!-- Modal de detalles -->
-    <div v-if="mantenimientoSeleccionado" class="modal">
-      <div class="modal-content">
+    <div v-if="selectedMaintenance" class="modal" @click="closeDetails">
+      <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>Detalles del Mantenimiento</h3>
-          <button @click="cerrarDetalles" class="btn-cerrar">
-            <i class="fas fa-times"></i>
-          </button>
+          <button @click="closeDetails" class="close-button">×</button>
         </div>
-        
         <div class="modal-body">
-          <div class="detalle-header">
-            <span class="tipo" :class="mantenimientoSeleccionado.tipo.toLowerCase()">
-              {{ mantenimientoSeleccionado.tipo }}
-            </span>
-            <span class="estado" :class="mantenimientoSeleccionado.estado.toLowerCase()">
-              {{ mantenimientoSeleccionado.estado }}
-            </span>
-          </div>
-
-          <div class="detalle-info">
-            <p>
-              <i class="fas fa-clock"></i>
-              {{ formatearFechaCompleta(mantenimientoSeleccionado.fechaProgramada) }}
-            </p>
-            <p>
-              <i class="fas fa-building"></i>
-              {{ mantenimientoSeleccionado.cliente?.nombre }}
-            </p>
-            <p>
-              <i class="fas fa-store"></i>
-              {{ mantenimientoSeleccionado.sucursal?.nombre }}
-            </p>
-            <p>
-              <i class="fas fa-tint"></i>
-              Dispensador #{{ mantenimientoSeleccionado.dispensador?.numero_serie }}
-            </p>
-            <p>
-              <i class="fas fa-user-cog"></i>
-              {{ mantenimientoSeleccionado.tecnico?.nombre }}
-            </p>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <label>Cliente</label>
+              <span>{{ selectedMaintenance.cliente?.nombre }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Sucursal</label>
+              <span>{{ selectedMaintenance.sucursal?.nombre }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Fecha y Hora</label>
+              <span>{{ formatFullDate(selectedMaintenance.fechaProgramada) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Tipo</label>
+              <span>{{ selectedMaintenance.tipo }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Estado</label>
+              <span>{{ selectedMaintenance.estado }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Técnico</label>
+              <span>{{ selectedMaintenance.tecnico?.nombre }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Dispensador</label>
+              <span>#{{ selectedMaintenance.dispensador?.numero_serie }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -117,115 +168,132 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useMantenimientosStore } from '@/stores/mantenimientos.store'
 import { storeToRefs } from 'pinia'
 import type { Mantenimiento } from '@/interfaces/mantenimiento.interface'
-import type { Cliente } from '@/interfaces/cliente.interface'
-import type { Sucursal } from '@/interfaces/sucursal.interface'
-import type { Dispensador } from '@/interfaces/dispensador.interface'
-import type { Tecnico } from '@/interfaces/tecnico.interface'
 
-const mantenimientosStore = useMantenimientosStore()
-const { mantenimientos, loading, error } = storeToRefs(mantenimientosStore)
+const store = useMantenimientosStore()
+const { mantenimientos, loading, error } = storeToRefs(store)
+const selectedMaintenance = ref<Mantenimiento | null>(null)
 
-const fechaActual = ref(new Date())
-const mantenimientoSeleccionado = ref<Mantenimiento | null>(null)
-
-const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-
-const nombreMes = computed(() => {
-  return fechaActual.value.toLocaleString('es-ES', { month: 'long' })
+const filters = ref({
+  clienteId: '',
+  sucursalId: '',
+  tipo: '',
+  estado: ''
 })
 
-const año = computed(() => {
-  return fechaActual.value.getFullYear()
-})
+const groupedMaintenances = computed(() => {
+  if (!mantenimientos.value) return {}
 
-const diasDelMes = computed(() => {
-  const primerDia = new Date(fechaActual.value.getFullYear(), fechaActual.value.getMonth(), 1)
-  const ultimoDia = new Date(fechaActual.value.getFullYear(), fechaActual.value.getMonth() + 1, 0)
+  const groups: Record<string, Mantenimiento[]> = {}
   
-  const dias = []
-  
-  // Agregar días del mes anterior
-  const diasPrevios = primerDia.getDay()
-  const ultimoDiaMesAnterior = new Date(fechaActual.value.getFullYear(), fechaActual.value.getMonth(), 0)
-  for (let i = diasPrevios - 1; i >= 0; i--) {
-    const fecha = new Date(ultimoDiaMesAnterior)
-    fecha.setDate(ultimoDiaMesAnterior.getDate() - i)
-    dias.push({
-      fecha: fecha.toISOString().split('T')[0],
-      esDelMesActual: false,
-      esHoy: false
-    })
-  }
-  
-  // Agregar días del mes actual
-  const hoy = new Date()
-  for (let i = 1; i <= ultimoDia.getDate(); i++) {
-    const fecha = new Date(fechaActual.value.getFullYear(), fechaActual.value.getMonth(), i)
-    dias.push({
-      fecha: fecha.toISOString().split('T')[0],
-      esDelMesActual: true,
-      esHoy: fecha.toDateString() === hoy.toDateString()
-    })
-  }
-  
-  // Agregar días del mes siguiente
-  const diasRestantes = 42 - dias.length // 6 semanas completas
-  for (let i = 1; i <= diasRestantes; i++) {
-    const fecha = new Date(fechaActual.value.getFullYear(), fechaActual.value.getMonth() + 1, i)
-    dias.push({
-      fecha: fecha.toISOString().split('T')[0],
-      esDelMesActual: false,
-      esHoy: false
-    })
-  }
-  
-  return dias
-})
-
-const mantenimientosPorDia = computed(() => {
-  const porDia: Record<string, Mantenimiento[]> = {}
-  
-  if (!mantenimientos.value) return porDia
-  
-  mantenimientos.value.forEach(mantenimiento => {
-    const fecha = mantenimiento.fechaProgramada.split('T')[0]
-    if (!porDia[fecha]) {
-      porDia[fecha] = []
+  mantenimientos.value.forEach(maintenance => {
+    const date = new Date(maintenance.fechaProgramada).toISOString().split('T')[0]
+    if (!groups[date]) {
+      groups[date] = []
     }
-    porDia[fecha].push(mantenimiento)
+    groups[date].push(maintenance)
   })
-  
-  // Ordenar por hora
-  Object.keys(porDia).forEach(fecha => {
-    porDia[fecha].sort((a, b) => 
-      new Date(a.fechaProgramada).getTime() - new Date(b.fechaProgramada).getTime()
-    )
-  })
-  
-  return porDia
+
+  // Ordenar por fecha
+  const sortedGroups: Record<string, Mantenimiento[]> = {}
+  Object.keys(groups)
+    .sort()
+    .forEach(date => {
+      // Ordenar por hora dentro de cada grupo
+      sortedGroups[date] = groups[date].sort((a, b) => 
+        new Date(a.fechaProgramada).getTime() - new Date(b.fechaProgramada).getTime()
+      )
+    })
+
+  return sortedGroups
 })
 
-const mesAnterior = () => {
-  fechaActual.value = new Date(fechaActual.value.getFullYear(), fechaActual.value.getMonth() - 1)
+// Obtener clientes únicos de los mantenimientos
+const uniqueClients = computed(() => {
+  if (!mantenimientos.value) return []
+  const clientesMap = new Map()
+  mantenimientos.value.forEach(m => {
+    if (m.cliente) {
+      clientesMap.set(m.cliente.id, m.cliente)
+    }
+  })
+  return Array.from(clientesMap.values())
+})
+
+// Obtener sucursales filtradas por cliente seleccionado
+const filteredBranches = computed(() => {
+  if (!mantenimientos.value || !filters.value.clienteId) return []
+  const sucursalesMap = new Map()
+  mantenimientos.value
+    .filter(m => m.cliente?.id === filters.value.clienteId)
+    .forEach(m => {
+      if (m.sucursal) {
+        sucursalesMap.set(m.sucursal.id, m.sucursal)
+      }
+    })
+  return Array.from(sucursalesMap.values())
+})
+
+// Verificar si hay filtros activos
+const hasActiveFilters = computed(() => {
+  return Object.values(filters.value).some(value => value !== '')
+})
+
+// Mantenimientos filtrados
+const filteredMaintenances = computed(() => {
+  if (!mantenimientos.value) return {}
+
+  const filtered = mantenimientos.value.filter(m => {
+    if (filters.value.clienteId && m.cliente?.id !== filters.value.clienteId) return false
+    if (filters.value.sucursalId && m.sucursal?.id !== filters.value.sucursalId) return false
+    if (filters.value.tipo && m.tipo !== filters.value.tipo) return false
+    if (filters.value.estado && m.estado !== filters.value.estado) return false
+    return true
+  })
+
+  const groups: Record<string, Mantenimiento[]> = {}
+  filtered.forEach(maintenance => {
+    const date = new Date(maintenance.fechaProgramada).toISOString().split('T')[0]
+    if (!groups[date]) {
+      groups[date] = []
+    }
+    groups[date].push(maintenance)
+  })
+
+  // Ordenar por fecha y hora
+  const sortedGroups: Record<string, Mantenimiento[]> = {}
+  Object.keys(groups)
+    .sort()
+    .forEach(date => {
+      sortedGroups[date] = groups[date].sort((a, b) => 
+        new Date(a.fechaProgramada).getTime() - new Date(b.fechaProgramada).getTime()
+      )
+    })
+
+  return sortedGroups
+})
+
+const formatDateHeader = (date: string) => {
+  return new Date(date).toLocaleDateString('es-ES', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
 }
 
-const mesSiguiente = () => {
-  fechaActual.value = new Date(fechaActual.value.getFullYear(), fechaActual.value.getMonth() + 1)
-}
-
-const formatearHora = (fecha: string) => {
-  return new Date(fecha).toLocaleTimeString('es-ES', {
+const formatTime = (date: string) => {
+  return new Date(date).toLocaleTimeString('es-ES', {
     hour: '2-digit',
     minute: '2-digit'
   })
 }
 
-const formatearFechaCompleta = (fecha: string) => {
-  return new Date(fecha).toLocaleString('es-ES', {
+const formatFullDate = (date: string) => {
+  return new Date(date).toLocaleString('es-ES', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -235,168 +303,196 @@ const formatearFechaCompleta = (fecha: string) => {
   })
 }
 
-const mostrarDetalles = (mantenimiento: Mantenimiento) => {
-  mantenimientoSeleccionado.value = mantenimiento
+const showDetails = (maintenance: Mantenimiento) => {
+  selectedMaintenance.value = maintenance
 }
 
-const cerrarDetalles = () => {
-  mantenimientoSeleccionado.value = null
+const closeDetails = () => {
+  selectedMaintenance.value = null
 }
 
-// Estado para notificaciones
-const notification = ref({
-  show: false,
-  message: '',
-  type: 'success',
-  icon: 'fas fa-check-circle'
-})
+// Funciones auxiliares
+const getClienteName = (id: string) => {
+  return uniqueClients.value.find(c => c.id === id)?.nombre || ''
+}
+
+const getBranchName = (id: string) => {
+  return filteredBranches.value.find(b => b.id === id)?.nombre || ''
+}
+
+const clearFilters = () => {
+  filters.value = {
+    clienteId: '',
+    sucursalId: '',
+    tipo: '',
+    estado: ''
+  }
+}
 
 onMounted(async () => {
-  try {
-    await mantenimientosStore.fetchMantenimientos()
-  } catch (error) {
-    console.error('Error al cargar mantenimientos:', error)
-  }
+  await store.fetchMantenimientos()
 })
 </script>
 
 <style scoped>
-.calendario-container {
-  padding: 1rem;
+.maintenance-list-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
 }
 
-.page-header {
+.header {
   margin-bottom: 2rem;
+  text-align: center;
 }
 
-.calendario-controls {
+.header h1 {
+  color: var(--primary-color);
+  font-size: 2rem;
+}
+
+.loading, .error {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 1rem;
-  margin-top: 1rem;
-}
-
-.btn-control {
-  background: none;
-  border: none;
+  padding: 2rem;
   font-size: 1.2rem;
-  color: var(--primary-color);
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 50%;
-  transition: background-color 0.3s;
+  color: #666;
 }
 
-.btn-control:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+.error {
+  color: #dc3545;
 }
 
-.calendario {
+.maintenance-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.date-group {
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
-.dias-semana {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
+.date-header {
   background: var(--primary-color);
   color: white;
-  border-radius: 8px 8px 0 0;
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.dia-header {
+.date-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  text-transform: capitalize;
+}
+
+.count {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.maintenance-cards {
   padding: 1rem;
-  text-align: center;
-  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.dias-grid {
+.maintenance-card {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  border-top: 1px solid #eee;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.dia-celda {
-  min-height: 120px;
-  padding: 0.5rem;
-  border-right: 1px solid #eee;
-  border-bottom: 1px solid #eee;
+.maintenance-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.dia-celda:nth-child(7n) {
-  border-right: none;
+.maintenance-card.preventivo {
+  border-left: 4px solid #1976d2;
 }
 
-.dia-numero {
+.maintenance-card.correctivo {
+  border-left: 4px solid #dc3545;
+}
+
+.time {
+  font-size: 1.2rem;
   font-weight: 500;
-  margin-bottom: 0.5rem;
-}
-
-.otro-mes {
-  background-color: #f8f9fa;
-  color: #adb5bd;
-}
-
-.hoy {
-  background-color: #e8f5e9;
-}
-
-.hoy .dia-numero {
   color: var(--primary-color);
-  font-weight: bold;
 }
 
-.mantenimientos-dia {
+.main-info {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.mantenimiento-item {
+.client {
+  font-weight: 500;
+}
+
+.branch {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.status-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.type-badge, .status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 15px;
   font-size: 0.8rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: transform 0.2s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 500;
 }
 
-.mantenimiento-item:hover {
-  transform: scale(1.02);
-}
-
-.mantenimiento-item.preventivo {
+.type-badge {
   background: #e3f2fd;
   color: #1976d2;
 }
 
-.mantenimiento-item.correctivo {
+.status-badge {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.maintenance-card.pendiente .status-badge {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.maintenance-card.en_proceso .status-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.maintenance-card.completado .status-badge {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.maintenance-card.cancelado .status-badge {
   background: #fce4ec;
   color: #c2185b;
-}
-
-.mantenimiento-item.pendiente {
-  border-left: 3px solid #e65100;
-}
-
-.mantenimiento-item.en_proceso {
-  border-left: 3px solid #1976d2;
-}
-
-.mantenimiento-item.completado {
-  border-left: 3px solid #2e7d32;
-}
-
-.mantenimiento-item.cancelado {
-  border-left: 3px solid #c2185b;
-}
-
-.hora {
-  font-weight: 500;
-  margin-right: 0.5rem;
 }
 
 /* Modal styles */
@@ -415,9 +511,9 @@ onMounted(async () => {
 
 .modal-content {
   background: white;
-  border-radius: 8px;
+  border-radius: 10px;
   width: 90%;
-  max-width: 500px;
+  max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
 }
@@ -426,115 +522,158 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 1.5rem;
   border-bottom: 1px solid #eee;
 }
 
-.btn-cerrar {
+.modal-header h3 {
+  margin: 0;
+  color: var(--primary-color);
+}
+
+.close-button {
   background: none;
   border: none;
-  font-size: 1.2rem;
+  font-size: 1.5rem;
   cursor: pointer;
   color: #666;
 }
 
 .modal-body {
-  padding: 1rem;
+  padding: 1.5rem;
 }
 
-.detalle-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 1rem;
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
 }
 
-.detalle-info {
+.detail-item {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.detalle-info p {
+.detail-item label {
+  font-weight: 500;
+  color: #666;
+}
+
+.detail-item span {
+  font-size: 1.1rem;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.filter-group {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.detalle-info i {
-  width: 20px;
-  color: var(--primary-color);
+.filter-group label {
+  font-weight: 500;
+  color: #666;
 }
 
-.tipo, .estado {
-  padding: 0.25rem 0.75rem;
-  border-radius: 15px;
-  font-size: 0.9rem;
+.filter-group select {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 1rem;
+  color: #333;
+}
+
+.filter-group select:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.clear-filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-filters:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.active-filters {
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.active-filters > span {
+  color: #666;
   font-weight: 500;
 }
 
-.tipo.preventivo {
-  background: #e3f2fd;
-  color: #1976d2;
+.filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.tipo.correctivo {
-  background: #fce4ec;
-  color: #c2185b;
-}
-
-.estado.pendiente {
-  background: #fff3e0;
-  color: #e65100;
-}
-
-.estado.en_proceso {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.estado.completado {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.estado.cancelado {
-  background: #fce4ec;
-  color: #c2185b;
-}
-
-.notification {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 1rem;
-  border-radius: 8px;
+.filter-tag {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  animation: slideIn 0.3s ease-out;
-  z-index: 1000;
+  padding: 0.25rem 0.75rem;
+  background: #e3f2fd;
+  color: #1976d2;
+  border-radius: 15px;
+  font-size: 0.9rem;
 }
 
-.notification.success {
-  background-color: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
+.filter-tag button {
+  background: none;
+  border: none;
+  color: #1976d2;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.notification.error {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+.no-results {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
 }
 
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+.no-results i {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.no-results p {
+  font-size: 1.2rem;
+  margin: 0;
 }
 </style> 
