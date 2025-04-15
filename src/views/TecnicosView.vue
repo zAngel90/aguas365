@@ -217,6 +217,7 @@ const openModal = (mode: 'add' | 'edit', tecnico?: Tecnico) => {
       nombre: tecnico.nombre,
       email: tecnico.email,
       telefono: tecnico.telefono,
+      whatsapp: tecnico.telefono,
       especialidad: tecnico.especialidad,
       estado: tecnico.estado
     };
@@ -269,11 +270,9 @@ const closeDeleteModal = () => {
   selectedTecnico.value = null;
 };
 
-const deleteTecnico = async (id?: number) => {
+const deleteTecnico = async () => {
   try {
-    if (id) {
-      await tecnicosStore.deleteTecnico(id);
-    } else if (selectedTecnico.value) {
+    if (selectedTecnico.value?.id) {
       await tecnicosStore.deleteTecnico(selectedTecnico.value.id);
       closeDeleteModal();
     }
