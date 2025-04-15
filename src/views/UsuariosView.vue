@@ -2,10 +2,10 @@
   <div>
     <div class="page-header">
       <h1>Gestión de Usuarios</h1>
-      <button class="btn-primary" @click="openModal">
+      <!-- <button class="btn-primary" @click="openModal">
         <i class="fas fa-plus"></i>
         Nuevo Usuario
-      </button>
+      </button> -->
     </div>
 
     <div v-if="loading" class="loading">Cargando usuarios...</div>
