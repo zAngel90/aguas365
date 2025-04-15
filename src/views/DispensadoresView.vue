@@ -8,6 +8,16 @@
       </button>
     </div>
     
+    <div class="search-bar">
+      <i class="fas fa-search"></i>
+      <input 
+        type="text" 
+        v-model="searchQuery" 
+        placeholder="Buscar por nombre de cliente..."
+        @input="filterDispensadores"
+      >
+    </div>
+    
     <div v-if="loading" class="loading">
       <i class="fas fa-spinner fa-spin"></i> Cargando dispensadores...
     </div>
@@ -22,7 +32,7 @@
     </div>
     
     <div v-else class="dispensadores-grid">
-      <div v-for="dispensador in dispensadores" :key="dispensador.id" class="dispensador-card">
+      <div v-for="dispensador in filteredDispensadores" :key="dispensador.id" class="dispensador-card">
         <div class="card-header">
           <div class="header-info">
             <h3>{{ dispensador.modelo }}</h3>
@@ -175,6 +185,7 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const asignacionTipo = ref('cliente')
 const selectedClienteId = ref<number | null>(null)
+const searchQuery = ref('')
 
 const newDispensador = ref({
   id: null as number | null,
@@ -190,6 +201,16 @@ const newDispensador = ref({
 const sucursalesFiltradas = computed(() => {
   if (!selectedClienteId.value) return []
   return sucursales.value?.filter(s => s.cliente_id === selectedClienteId.value) || []
+})
+
+const filteredDispensadores = computed(() => {
+  if (!searchQuery.value) return dispensadores.value;
+  
+  const query = searchQuery.value.toLowerCase();
+  return dispensadores.value.filter(dispensador => {
+    const clienteNombre = dispensador.cliente_nombre?.toLowerCase() || '';
+    return clienteNombre.includes(query);
+  });
 })
 
 onMounted(async () => {
@@ -314,6 +335,10 @@ function formatDate(date: string) {
   }
   
   return `Instalado: ${instalacionDate.toLocaleDateString('es-ES', options)}`
+}
+
+function filterDispensadores() {
+  // Implement the filter logic here
 }
 </script>
 
@@ -552,5 +577,34 @@ function formatDate(date: string) {
 
 .btn-secondary:hover {
   background: #e9ecef;
+}
+
+.search-bar {
+  margin: 1rem 0;
+  position: relative;
+  max-width: 500px;
+}
+
+.search-bar i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #666;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 12px 12px 12px 40px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.search-bar input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
 }
 </style>

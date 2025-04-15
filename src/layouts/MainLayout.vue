@@ -30,6 +30,11 @@
           <span>Mantenimientos</span>
         </router-link>
         
+        <router-link to="/calendario" class="nav-item" :class="{ active: $route.path === '/calendario' }">
+          <i class="fas fa-calendar-alt"></i>
+          <span>Calendario</span>
+        </router-link>
+        
         <router-link to="/historial-mantenimientos" class="nav-item" :class="{ active: $route.path === '/historial-mantenimientos' }">
           <i class="fas fa-history"></i>
           <span>Historial</span>
@@ -48,6 +53,11 @@
         <router-link to="/reportes" class="nav-item" :class="{ active: $route.path === '/reportes' }">
           <i class="fas fa-chart-bar"></i>
           <span>Reportes</span>
+        </router-link>
+
+        <router-link to="/importar-excel" class="nav-item" :class="{ active: $route.path === '/importar-excel' }">
+          <i class="fas fa-file-excel"></i>
+          <span>Importar Excel</span>
         </router-link>
       </nav>
       
@@ -82,7 +92,7 @@ import { useAuthStore } from '@/stores/auth.store';
 const authStore = useAuthStore();
 const route = useRoute();
 
-const userName = computed(() => authStore.user?.nombre || 'Usuario');
+const userName = computed(() => authStore.user?.username || 'Usuario');
 
 const pageTitle = computed(() => {
   switch (route.path) {
@@ -90,10 +100,12 @@ const pageTitle = computed(() => {
     case '/clientes': return 'Gestión de Clientes';
     case '/dispensadores': return 'Gestión de Dispensadores';
     case '/mantenimientos': return 'Gestión de Mantenimientos';
+    case '/calendario': return 'Calendario de Mantenimientos';
     case '/historial-mantenimientos': return 'Historial de Mantenimientos';
     case '/tecnicos': return 'Gestión de Técnicos';
     case '/usuarios': return 'Gestión de Usuarios';
     case '/reportes': return 'Reportes';
+    case '/importar-excel': return 'Importar Excel';
     default: return '';
   }
 });

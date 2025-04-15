@@ -63,7 +63,22 @@ export const clientesService = {
   },
 
   getSucursalesCount: async (clienteId: number): Promise<number> => {
-    const response = await api.get(`/clientes/${clienteId}/sucursales/count`);
-    return response.data.count;
+    try {
+      const response = await api.get(`${apiConfig.endpoints.clientes}/${clienteId}/sucursales/count`);
+      return response.data.count;
+    } catch (error) {
+      console.error('Error al obtener conteo de sucursales:', error);
+      throw error;
+    }
+  },
+
+  getSucursales: async (clienteId: number) => {
+    try {
+      const response = await api.get(`${apiConfig.endpoints.sucursales}/cliente/${clienteId}`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error al obtener sucursales del cliente:', error);
+      throw error;
+    }
   }
 }; 

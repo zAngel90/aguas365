@@ -52,6 +52,19 @@ const router = createRouter({
           component: () => import('@/views/ReportesView.vue')
         },
         {
+          path: 'importar-excel',
+          name: 'importar-excel',
+          component: () => import('@/views/ImportarExcelView.vue')
+        },
+        {
+          path: 'calendario',
+          name: 'calendario',
+          component: () => import('@/views/CalendarioView.vue'),
+          meta: {
+            requiresAuth: true
+          }
+        },
+        {
           path: 'historial-mantenimientos',
           name: 'historial-mantenimientos',
           component: HistorialMantenimientosView

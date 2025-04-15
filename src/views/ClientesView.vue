@@ -8,6 +8,16 @@
       </button>
     </div>
 
+    <div class="search-bar">
+      <i class="fas fa-search"></i>
+      <input 
+        type="text" 
+        v-model="searchQuery" 
+        placeholder="Buscar cliente por nombre..."
+        @input="filterClientes"
+      >
+    </div>
+
     <!-- Notificación de éxito -->
     <div v-if="notification.show" :class="['notification', notification.type]">
       <i :class="notification.icon"></i>
@@ -15,7 +25,7 @@
     </div>
 
     <div class="clientes-grid">
-      <div v-for="cliente in clientes" :key="cliente.id" class="cliente-card">
+      <div v-for="cliente in filteredClientes" :key="cliente.id" class="cliente-card">
         <div class="cliente-header">
           <h3>{{ cliente.nombre }}</h3>
           <div class="cliente-actions">
@@ -33,7 +43,7 @@
         <div class="cliente-info">
           <p><i class="fas fa-map-marker-alt"></i> {{ cliente.direccion }}</p>
           <p><i class="fas fa-phone"></i> {{ cliente.telefono }}</p>
-          <p><i class="fas fa-envelope"></i> {{ cliente.email }}</p>
+          <p class="email-info"><i class="fas fa-envelope"></i> {{ cliente.email }}</p>
         </div>
         <div class="cliente-footer">
           <span class="sucursales-count">
@@ -145,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useClientesStore } from '@/stores/clientes.store'
 import { clientesService } from '@/services/clientes.service'
 import { storeToRefs } from 'pinia'
@@ -188,6 +198,41 @@ const notification = reactive({
   type: 'success',
   icon: 'fas fa-check-circle'
 })
+
+const searchQuery = ref('');
+const filteredClientes = ref([]);
+
+const filterClientes = () => {
+  if (!searchQuery.value) {
+    filteredClientes.value = clientes.value;
+    return;
+  }
+  
+  const query = searchQuery.value.toLowerCase();
+  filteredClientes.value = clientes.value.filter(cliente => 
+    cliente.nombre.toLowerCase().includes(query)
+  );
+};
+
+// Inicializar la lista filtrada y cargar los conteos
+onMounted(async () => {
+  try {
+    await clientesStore.fetchClientes();
+    filteredClientes.value = clientes.value;
+    
+    // Cargar conteos de sucursales para cada cliente
+    for (const cliente of clientes.value) {
+      await loadSucursalesCount(cliente.id);
+    }
+  } catch (error) {
+    console.error('Error al cargar datos iniciales:', error);
+  }
+});
+
+// Observar cambios en clientes para mantener actualizada la lista filtrada
+watch(clientes, () => {
+  filterClientes();
+});
 
 // Métodos
 const openModal = () => {
@@ -391,30 +436,18 @@ const deleteSucursal = async (id) => {
 // Función para cargar el conteo de sucursales de un cliente
 const loadSucursalesCount = async (clienteId: number) => {
   try {
-    const count = await clientesService.getSucursalesCount(clienteId)
-    sucursalesCounts.value[clienteId] = count
+    const count = await clientesService.getSucursalesCount(clienteId);
+    sucursalesCounts.value[clienteId] = count;
   } catch (error) {
-    console.error('Error al obtener conteo de sucursales:', error)
+    console.error('Error al obtener conteo de sucursales:', error);
+    sucursalesCounts.value[clienteId] = 0;
   }
-}
+};
 
 // Función para obtener el conteo de sucursales
 const getSucursalesCount = (clienteId: number) => {
-  return sucursalesCounts.value[clienteId] || 0
+  return sucursalesCounts.value[clienteId] || 0;
 }
-
-// Cargar clientes al montar el componente
-onMounted(async () => {
-  try {
-    await clientesStore.fetchClientes()
-    // Cargar conteos de sucursales para cada cliente
-    for (const cliente of clientes.value) {
-      await loadSucursalesCount(cliente.id)
-    }
-  } catch (error) {
-    console.error('Error al cargar clientes:', error)
-  }
-})
 </script>
 
 <style scoped>
@@ -627,5 +660,41 @@ onMounted(async () => {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+.search-bar {
+  margin: 1rem 0;
+  position: relative;
+  max-width: 500px;
+}
+
+.search-bar i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #666;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 12px 12px 12px 40px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.search-bar input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.cliente-info .email-info {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 </style> 
