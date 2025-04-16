@@ -42,6 +42,7 @@
               <div class="info-text">
                 <strong>{{ mantenimiento.cliente?.nombre || 'Cliente no asignado' }}</strong>
                 <span>{{ mantenimiento.sucursal?.nombre || 'Sucursal no asignada' }}</span>
+                <p><i class="fas fa-map-marker-alt"></i> {{ getSucursalDireccion(mantenimiento.sucursal_id) }}</p>
               </div>
             </div>
 
@@ -80,6 +81,10 @@
             <i class="fas fa-trash"></i>
             Eliminar
           </button>
+          <button @click="openEnviarTecnicoModal(mantenimiento)" class="action-btn whatsapp">
+            <i class="fab fa-whatsapp"></i>
+            Enviar a Técnico
+          </button>
         </div>
       </div>
     </div>
@@ -104,14 +109,19 @@
                 </option>
               </select>
             </div>
-            <div class="form-group">
+            <div class="form-group sucursal-group">
               <label>Sucursal</label>
-              <select v-model="newMantenimiento.sucursal_id" @change="handleSucursalChange" required>
-                <option value="">Seleccionar...</option>
-                <option v-for="sucursal in sucursalesFiltradas" :key="sucursal.id" :value="sucursal.id">
-                  {{ sucursal.nombre }}
-                </option>
-              </select>
+              <div class="sucursal-select-container">
+                <select v-model="newMantenimiento.sucursal_id" @change="handleSucursalChange" required>
+                  <option value="">Seleccionar...</option>
+                  <option v-for="sucursal in sucursalesFiltradas" :key="sucursal.id" :value="sucursal.id">
+                    {{ sucursal.nombre }} - {{ sucursal.direccion }}
+                  </option>
+                </select>
+                <div v-if="sucursalSeleccionadaDireccion" class="sucursal-direccion">
+                  <i class="fas fa-map-marker-alt"></i> {{ sucursalSeleccionadaDireccion }}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -185,6 +195,34 @@
       </div>
     </div>
   </div>
+
+  <!-- Modal para enviar a técnico -->
+  <div v-if="showEnviarTecnicoModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Enviar a Técnico</h2>
+        <button class="close-btn" @click="closeEnviarTecnicoModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Seleccionar Técnico</label>
+          <select v-model="selectedTecnicoId" required>
+            <option value="">Seleccionar...</option>
+            <option v-for="tecnico in tecnicos" :key="tecnico.id" :value="tecnico.id">
+              {{ tecnico.nombre }} - {{ tecnico.telefono }}
+            </option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" @click="closeEnviarTecnicoModal">Cancelar</button>
+          <a v-if="selectedTecnicoId" :href="getWhatsAppLink" target="_blank" class="btn-whatsapp">
+            <i class="fab fa-whatsapp"></i>
+            Enviar por WhatsApp
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -227,6 +265,10 @@ const newMantenimiento = ref({
   observaciones: ''
 });
 
+const showEnviarTecnicoModal = ref(false);
+const selectedTecnicoId = ref<number | null>(null);
+const selectedMantenimiento = ref<any>(null);
+
 // Computed para filtrar sucursales según el cliente seleccionado
 const sucursalesFiltradas = computed(() => {
   if (!selectedClienteId.value) return [];
@@ -262,6 +304,12 @@ const dispensadoresFiltrados = computed(() => {
   
   console.log('Dispensadores filtrados:', filtrados);
   return filtrados;
+});
+
+const sucursalSeleccionadaDireccion = computed(() => {
+  if (!newMantenimiento.value.sucursal_id) return '';
+  const sucursal = sucursales.value.find(s => s.id === newMantenimiento.value.sucursal_id);
+  return sucursal?.direccion || '';
 });
 
 onMounted(async () => {
@@ -421,6 +469,48 @@ const getTecnicoNombre = (tecnico: Tecnico | null) => {
   if (!tecnico) return '';
   return tecnico.nombre;
 };
+
+const getSucursalDireccion = (sucursalId: number | null) => {
+  if (!sucursalId) return 'Dirección no disponible';
+  const sucursal = sucursales.value.find(s => s.id === sucursalId);
+  return sucursal?.direccion || 'Dirección no disponible';
+};
+
+const openEnviarTecnicoModal = (mantenimiento: any) => {
+  selectedMantenimiento.value = mantenimiento;
+  showEnviarTecnicoModal.value = true;
+};
+
+const closeEnviarTecnicoModal = () => {
+  showEnviarTecnicoModal.value = false;
+  selectedTecnicoId.value = null;
+  selectedMantenimiento.value = null;
+};
+
+const getWhatsAppLink = computed(() => {
+  if (!selectedTecnicoId.value || !selectedMantenimiento.value) return '#';
+  
+  const tecnico = tecnicos.value.find(t => t.id === selectedTecnicoId.value);
+  if (!tecnico?.telefono) return '#';
+
+  const sucursal = sucursales.value.find(s => s.id === selectedMantenimiento.value.sucursal_id);
+  const cliente = clientes.value.find(c => c.id === selectedMantenimiento.value.cliente_id);
+  const dispensador = dispensadores.value.find(d => d.id === selectedMantenimiento.value.dispensador_id);
+
+  const mensaje = `*Nuevo Mantenimiento Asignado*%0A
+-----------------------------------%0A
+*Cliente:* ${cliente?.nombre}%0A
+*Sucursal:* ${sucursal?.nombre}%0A
+*Dirección:* ${sucursal?.direccion}%0A
+*Fecha:* ${formatDate(selectedMantenimiento.value.fechaProgramada)}%0A
+*Tipo:* ${selectedMantenimiento.value.tipo}%0A
+*Estado:* ${selectedMantenimiento.value.estado}%0A
+*Dispensador:* ${dispensador?.modelo} - #${dispensador?.numero_serie}%0A
+${selectedMantenimiento.value.descripcion ? `*Descripción:* ${selectedMantenimiento.value.descripcion}%0A` : ''}`;
+
+  const telefono = tecnico.telefono.replace(/\D/g, '');
+  return `https://wa.me/${telefono}?text=${mensaje}`;
+});
 </script>
 
 <style scoped>
@@ -549,6 +639,20 @@ const getTecnicoNombre = (tecnico: Tecnico | null) => {
   font-size: 0.95rem;
 }
 
+.info-text span.address {
+  color: #666;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.info-text span.address i {
+  color: var(--primary-color);
+  font-size: 0.9rem;
+}
+
 .description {
   border-top: 1px solid #eee;
   padding-top: 1rem;
@@ -601,6 +705,34 @@ const getTecnicoNombre = (tecnico: Tecnico | null) => {
   background: #c82333;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn.whatsapp {
+  background: #25d366;
+  color: white;
+}
+
+.action-btn.whatsapp:hover {
+  background: #128c7e;
+}
+
+.btn-whatsapp {
+  background: #25d366;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+}
+
+.btn-whatsapp:hover {
+  background: #128c7e;
 }
 
 .loading {
@@ -776,5 +908,28 @@ const getTecnicoNombre = (tecnico: Tecnico | null) => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.sucursal-group {
+  flex: 1;
+}
+
+.sucursal-select-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sucursal-direccion {
+  font-size: 0.9rem;
+  color: #666;
+  padding: 0.3rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sucursal-direccion i {
+  color: var(--primary-color);
 }
 </style> 

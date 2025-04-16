@@ -190,7 +190,7 @@ const groupedMaintenances = computed(() => {
   const groups: Record<string, Mantenimiento[]> = {}
   
   mantenimientos.value.forEach(maintenance => {
-    const date = new Date(maintenance.fechaProgramada).toISOString().split('T')[0]
+    const date = maintenance.fechaProgramada.split('T')[0]
     if (!groups[date]) {
       groups[date] = []
     }
@@ -202,9 +202,8 @@ const groupedMaintenances = computed(() => {
   Object.keys(groups)
     .sort()
     .forEach(date => {
-      // Ordenar por hora dentro de cada grupo
       sortedGroups[date] = groups[date].sort((a, b) => 
-        new Date(a.fechaProgramada).getTime() - new Date(b.fechaProgramada).getTime()
+        a.fechaProgramada.localeCompare(b.fechaProgramada)
       )
     })
 
@@ -256,7 +255,7 @@ const filteredMaintenances = computed(() => {
 
   const groups: Record<string, Mantenimiento[]> = {}
   filtered.forEach(maintenance => {
-    const date = new Date(maintenance.fechaProgramada).toISOString().split('T')[0]
+    const date = maintenance.fechaProgramada.split('T')[0]
     if (!groups[date]) {
       groups[date] = []
     }
@@ -269,7 +268,7 @@ const filteredMaintenances = computed(() => {
     .sort()
     .forEach(date => {
       sortedGroups[date] = groups[date].sort((a, b) => 
-        new Date(a.fechaProgramada).getTime() - new Date(b.fechaProgramada).getTime()
+        a.fechaProgramada.localeCompare(b.fechaProgramada)
       )
     })
 
@@ -277,30 +276,18 @@ const filteredMaintenances = computed(() => {
 })
 
 const formatDateHeader = (date: string) => {
-  return new Date(date).toLocaleDateString('es-ES', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  const [year, month, day] = date.split('-')
+  return `${day}/${month}/${year}`
 }
 
 const formatTime = (date: string) => {
-  return new Date(date).toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return date.split('T')[1].substring(0, 5)
 }
 
 const formatFullDate = (date: string) => {
-  return new Date(date).toLocaleString('es-ES', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const [datePart, timePart] = date.split('T')
+  const [year, month, day] = datePart.split('-')
+  return `${day}/${month}/${year} ${timePart.substring(0, 5)}`
 }
 
 const showDetails = (maintenance: Mantenimiento) => {
