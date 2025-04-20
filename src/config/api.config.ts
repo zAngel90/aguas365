@@ -1,5 +1,5 @@
 // Configuración de la API
-export const API_BASE_URL = 'https://backend56.onrender.com/api';
+export const API_BASE_URL = 'https://backend56-zi34.onrender.com/api';
 
 export const apiConfig = {
   baseURL: API_BASE_URL,

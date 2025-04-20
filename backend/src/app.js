@@ -7,7 +7,7 @@ const app = express();
 
 // CORS configuration
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: ['http://localhost:5173', 'https://aguas365.vercel.app', 'https://aguas365.lat'],
   credentials: false
 }));
 
