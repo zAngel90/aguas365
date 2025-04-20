@@ -75,7 +75,8 @@ const reportesController = {
         ORDER BY cantidad DESC
       `)
       
-      res.json(results)
+      console.log('Resultados de dispensadores por cliente:', results);
+      res.json({ data: results })
     } catch (error) {
       console.error('Error al obtener dispensadores por cliente:', error)
       res.status(500).json({ message: 'Error al obtener dispensadores por cliente' })

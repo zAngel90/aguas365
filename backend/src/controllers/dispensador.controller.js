@@ -42,6 +42,7 @@ const dispensadorController = {
           proximo_mantenimiento: dispensador.proximo_mantenimiento,
           estado: dispensador.estado,
           sector: dispensador.sector,
+          cantidad: dispensador.cantidad,
           cliente_id: dispensador.cliente_id,
           sucursal_id: dispensador.sucursal_id,
           cliente_nombre: dispensador.cliente?.nombre || dispensador.sucursal?.cliente?.nombre || 'Sin cliente',
@@ -118,6 +119,17 @@ const dispensadorController = {
         });
       }
 
+      // Validar cantidad
+      if (dispensadorData.cantidad !== undefined) {
+        const cantidad = parseInt(dispensadorData.cantidad);
+        if (isNaN(cantidad) || cantidad < 1) {
+          return res.status(400).json({
+            error: 'La cantidad debe ser un número entero mayor o igual a 1'
+          });
+        }
+        dispensadorData.cantidad = cantidad;
+      }
+
       const existingDispensador = await Dispensador.findOne({
         where: { numero_serie: dispensadorData.numero_serie }
       });
@@ -179,6 +191,17 @@ const dispensadorController = {
         return res.status(404).json({
           error: 'Dispensador no encontrado'
         });
+      }
+
+      // Validar cantidad si se está actualizando
+      if (dispensadorData.cantidad !== undefined) {
+        const cantidad = parseInt(dispensadorData.cantidad);
+        if (isNaN(cantidad) || cantidad < 1) {
+          return res.status(400).json({
+            error: 'La cantidad debe ser un número entero mayor o igual a 1'
+          });
+        }
+        dispensadorData.cantidad = cantidad;
       }
 
       if (dispensadorData.numero_serie) {

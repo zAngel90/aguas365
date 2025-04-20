@@ -37,7 +37,9 @@ export const reportesService = {
 
   async getDispensadoresPorCliente(): Promise<ClienteDispensadores[]> {
     try {
+      console.log('Llamando al endpoint de dispensadores por cliente');
       const response = await api.get(apiConfig.endpoints.reportes + '/dispensadores-por-cliente');
+      console.log('Respuesta del servidor:', response.data);
       return response.data.data;
     } catch (error) {
       console.error('Error al obtener dispensadores por cliente:', error);

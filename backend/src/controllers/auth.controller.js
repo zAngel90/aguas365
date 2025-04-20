@@ -1,6 +1,7 @@
-const db = require('../config/database');
+const { Usuario } = require('../models');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { Op } = require('sequelize');
 
 const authController = {
   login: async (req, res) => {
@@ -12,17 +13,15 @@ const authController = {
         return res.status(400).json({ message: 'Email y contraseña son requeridos' });
       }
       
-      // Buscar usuario por email
-      const [users] = await db.query('SELECT * FROM usuarios WHERE email = ?', [email]);
+      // Buscar usuario por email usando el modelo Sequelize
+      const usuario = await Usuario.findOne({ where: { email } });
       
-      if (users.length === 0) {
+      if (!usuario) {
         return res.status(401).json({ message: 'Credenciales inválidas' });
       }
       
-      const user = users[0];
-      
       // Verificar la contraseña
-      const isValidPassword = await bcrypt.compare(password, user.password);
+      const isValidPassword = await usuario.validarPassword(password);
       
       if (!isValidPassword) {
         return res.status(401).json({ message: 'Credenciales inválidas' });
@@ -31,9 +30,9 @@ const authController = {
       // Generar token JWT
       const token = jwt.sign(
         { 
-          id: user.id,
-          email: user.email,
-          rol: user.rol
+          id: usuario.id,
+          email: usuario.email,
+          rol: usuario.rol
         },
         process.env.JWT_SECRET || 'tu_jwt_secret',
         { expiresIn: '24h' }
@@ -43,10 +42,10 @@ const authController = {
       res.json({
         token,
         user: {
-          id: user.id,
-          nombre: user.nombre,
-          email: user.email,
-          rol: user.rol
+          id: usuario.id,
+          nombre: usuario.nombre,
+          email: usuario.email,
+          rol: usuario.rol
         }
       });
     } catch (error) {
@@ -59,29 +58,28 @@ const authController = {
     try {
       const { nombre, email, password, rol } = req.body;
       
-      // Verificar si el usuario ya existe
-      const [existingUsers] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email]);
+      // Verificar si el usuario ya existe usando el modelo Sequelize
+      const existingUsuario = await Usuario.findOne({ where: { email } });
       
-      if (existingUsers.length > 0) {
+      if (existingUsuario) {
         return res.status(400).json({ message: 'El email ya está registrado' });
       }
       
-      // Encriptar la contraseña
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      // Insertar nuevo usuario
-      const [result] = await db.query(
-        'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)',
-        [nombre, email, hashedPassword, rol || 'tecnico']
-      );
+      // Crear nuevo usuario usando el modelo Sequelize
+      const usuario = await Usuario.create({
+        nombre,
+        email,
+        password,
+        rol: rol || 'tecnico'
+      });
       
       res.status(201).json({
         message: 'Usuario registrado exitosamente',
         user: {
-          id: result.insertId,
-          nombre,
-          email,
-          rol: rol || 'tecnico'
+          id: usuario.id,
+          nombre: usuario.nombre,
+          email: usuario.email,
+          rol: usuario.rol
         }
       });
     } catch (error) {
@@ -92,13 +90,15 @@ const authController = {
 
   getProfile: async (req, res) => {
     try {
-      const [users] = await db.query('SELECT id, nombre, email, rol FROM usuarios WHERE id = ?', [req.user.id]);
+      const usuario = await Usuario.findByPk(req.user.id, {
+        attributes: ['id', 'nombre', 'email', 'rol']
+      });
       
-      if (users.length === 0) {
+      if (!usuario) {
         return res.status(404).json({ message: 'Usuario no encontrado' });
       }
       
-      res.json({ data: users[0] });
+      res.json({ data: usuario });
     } catch (error) {
       console.error('Error al obtener perfil:', error);
       res.status(500).json({ message: 'Error en el servidor' });
@@ -112,23 +112,31 @@ const authController = {
       
       // Verificar si el nuevo email ya existe
       if (email) {
-        const [existingUsuarios] = await db.query('SELECT * FROM usuarios WHERE email = ? AND id != ?', [email, userId]);
+        const existingUsuario = await Usuario.findOne({
+          where: { email, id: { [Op.ne]: userId } }
+        });
         
-        if (existingUsuarios.length > 0) {
+        if (existingUsuario) {
           return res.status(400).json({ message: 'El email ya está registrado' });
         }
       }
       
-      // Actualizar perfil
-      await db.query(
-        'UPDATE usuarios SET nombre = COALESCE(?, nombre), email = COALESCE(?, email) WHERE id = ?',
-        [nombre, email, userId]
+      // Actualizar perfil usando el modelo Sequelize
+      const [updated] = await Usuario.update(
+        { nombre, email },
+        { where: { id: userId } }
       );
       
-      // Obtener el usuario actualizado
-      const [updatedUsuario] = await db.query('SELECT id, nombre, email, rol FROM usuarios WHERE id = ?', [userId]);
+      if (!updated) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
+      }
       
-      res.json({ data: updatedUsuario[0] });
+      // Obtener el usuario actualizado
+      const usuario = await Usuario.findByPk(userId, {
+        attributes: ['id', 'nombre', 'email', 'rol']
+      });
+      
+      res.json({ data: usuario });
     } catch (error) {
       res.status(500).json({ message: 'Error al actualizar perfil', error });
     }
@@ -140,26 +148,22 @@ const authController = {
       const { currentPassword, newPassword } = req.body;
       
       // Obtener usuario actual
-      const [usuarios] = await db.query('SELECT * FROM usuarios WHERE id = ?', [userId]);
+      const usuario = await Usuario.findByPk(userId);
       
-      if (usuarios.length === 0) {
+      if (!usuario) {
         return res.status(404).json({ message: 'Usuario no encontrado' });
       }
       
-      const usuario = usuarios[0];
-      
       // Verificar contraseña actual
-      const isValidPassword = await bcrypt.compare(currentPassword, usuario.password);
+      const isValidPassword = await usuario.validarPassword(currentPassword);
       
       if (!isValidPassword) {
         return res.status(401).json({ message: 'Contraseña actual incorrecta' });
       }
       
-      // Hash de la nueva contraseña
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      
       // Actualizar contraseña
-      await db.query('UPDATE usuarios SET password = ? WHERE id = ?', [hashedPassword, userId]);
+      usuario.password = newPassword;
+      await usuario.save();
       
       res.json({ message: 'Contraseña actualizada correctamente' });
     } catch (error) {

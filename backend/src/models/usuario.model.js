@@ -28,18 +28,12 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM('admin', 'tecnico', 'cliente'),
       allowNull: false,
       defaultValue: 'cliente'
-    },
-    createdAt: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
-    },
-    updatedAt: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
     }
   }, {
+    tableName: 'usuarios',
+    timestamps: true,
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
     hooks: {
       beforeCreate: async (usuario) => {
         if (usuario.password) {

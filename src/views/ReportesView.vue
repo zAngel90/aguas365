@@ -167,6 +167,9 @@ onMounted(async () => {
     clientesStore.fetchClientes()
   ])
 
+  console.log('Datos de dispensadores por cliente:', dispensadoresPorCliente.value)
+  console.log('Elemento canvas de dispensadores:', dispensadoresChart.value)
+
   // Crear gráfico de mantenimientos
   if (mantenimientosChart.value && mantenimientosPendientes.value.length > 0) {
     new Chart(mantenimientosChart.value, {
@@ -232,6 +235,10 @@ onMounted(async () => {
 
   // Crear gráfico de dispensadores
   if (dispensadoresChart.value && dispensadoresPorCliente.value.length > 0) {
+    console.log('Creando gráfico de dispensadores con datos:', {
+      labels: dispensadoresPorCliente.value.map(item => item.cliente),
+      data: dispensadoresPorCliente.value.map(item => item.cantidad)
+    })
     new Chart(dispensadoresChart.value, {
       type: 'doughnut',
       data: {
@@ -274,6 +281,12 @@ onMounted(async () => {
         },
         cutout: '60%'
       }
+    })
+  } else {
+    console.log('No se pudo crear el gráfico de dispensadores porque:', {
+      hasCanvas: !!dispensadoresChart.value,
+      hasData: dispensadoresPorCliente.value.length > 0,
+      dataLength: dispensadoresPorCliente.value.length
     })
   }
 })

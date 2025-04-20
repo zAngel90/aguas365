@@ -42,7 +42,18 @@
               <div class="info-text">
                 <strong>{{ mantenimiento.cliente?.nombre || 'Cliente no asignado' }}</strong>
                 <span>{{ mantenimiento.sucursal?.nombre || 'Sucursal no asignada' }}</span>
-                <p><i class="fas fa-map-marker-alt"></i> {{ getSucursalDireccion(mantenimiento.sucursal_id) }}</p>
+              </div>
+            </div>
+
+            <div class="info-item">
+              <i class="fas fa-map-marker-alt"></i>
+              <div class="info-text">
+                <strong>Ubicación</strong>
+                <span>{{ getSucursalDireccion(mantenimiento.sucursal_id) }}</span>
+                <span v-if="mantenimiento.dispensador?.sector" class="sector-info">
+                  <i class="fas fa-map-signs"></i>
+                  Sector: {{ mantenimiento.dispensador.sector }}
+                </span>
               </div>
             </div>
 
@@ -62,11 +73,19 @@
               </div>
             </div>
 
-            <div class="info-item description" v-if="mantenimiento.descripcion">
+            <div v-if="mantenimiento.descripcion" class="info-item">
               <i class="fas fa-clipboard-list"></i>
               <div class="info-text">
                 <strong>Descripción</strong>
                 <span>{{ mantenimiento.descripcion }}</span>
+              </div>
+            </div>
+
+            <div v-if="mantenimiento.observaciones" class="info-item">
+              <i class="fas fa-clipboard-check"></i>
+              <div class="info-text">
+                <strong>Observaciones</strong>
+                <span>{{ mantenimiento.observaciones }}</span>
               </div>
             </div>
           </div>
@@ -130,8 +149,8 @@
               <label>Dispensador</label>
               <select v-model="newMantenimiento.dispensador_id" required>
                 <option value="">Seleccionar...</option>
-                <option v-for="disp in dispensadoresFiltrados" :key="disp.id" :value="disp.id">
-                  {{ disp.modelo }} - #{{ disp.numero_serie }}
+                <option v-for="disp in dispensadoresFiltrados" :key="disp.id + '-' + disp.numero_serie_display" :value="disp.id">
+                  {{ disp.modelo }} - {{ disp.numero_serie_display }}
                 </option>
               </select>
             </div>
@@ -153,8 +172,10 @@
                 v-model="newMantenimiento.fechaProgramada" 
                 type="datetime-local" 
                 required
-                :min="new Date().toISOString().slice(0, 16)"
               >
+              <small class="form-text text-muted">
+                Puede seleccionar fechas pasadas para registrar mantenimientos históricos
+              </small>
             </div>
             <div class="form-group">
               <label>Tipo</label>
@@ -185,6 +206,39 @@
           <div class="form-group">
             <label>Observaciones</label>
             <textarea v-model="newMantenimiento.observaciones" rows="3"></textarea>
+          </div>
+
+          <div v-if="ultimoMantenimiento" class="historial-section">
+            <div class="historial-header">
+              <i class="fas fa-history"></i>
+              <h3>Último Mantenimiento Realizado</h3>
+            </div>
+            <div class="historial-content">
+              <div class="historial-item">
+                <strong>Fecha:</strong>
+                <span>{{ formatDate(ultimoMantenimiento.fechaProgramada) }}</span>
+              </div>
+              <div class="historial-item">
+                <strong>Estado:</strong>
+                <span :class="ultimoMantenimiento.estado">{{ formatEstado(ultimoMantenimiento.estado) }}</span>
+              </div>
+              <div class="historial-item">
+                <strong>Tipo:</strong>
+                <span :class="ultimoMantenimiento.tipo">{{ ultimoMantenimiento.tipo }}</span>
+              </div>
+              <div v-if="ultimoMantenimiento.descripcion" class="historial-item">
+                <strong>Descripción:</strong>
+                <p>{{ ultimoMantenimiento.descripcion }}</p>
+              </div>
+              <div v-if="ultimoMantenimiento.observaciones" class="historial-item">
+                <strong>Observaciones:</strong>
+                <p>{{ ultimoMantenimiento.observaciones }}</p>
+              </div>
+              <div class="historial-item">
+                <strong>Técnico:</strong>
+                <span>{{ getTecnicoNombre(ultimoMantenimiento.tecnico) }}</span>
+              </div>
+            </div>
           </div>
 
           <div class="modal-actions">
@@ -226,7 +280,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useMantenimientosStore } from '@/stores/mantenimientos.store';
 import { useDispensadoresStore } from '@/stores/dispensadores.store';
 import { useClientesStore } from '@/stores/clientes.store';
@@ -269,6 +323,9 @@ const showEnviarTecnicoModal = ref(false);
 const selectedTecnicoId = ref<number | null>(null);
 const selectedMantenimiento = ref<any>(null);
 
+// Referencia para el último mantenimiento
+const ultimoMantenimiento = ref<Mantenimiento | null>(null);
+
 // Computed para filtrar sucursales según el cliente seleccionado
 const sucursalesFiltradas = computed(() => {
   if (!selectedClienteId.value) return [];
@@ -284,26 +341,26 @@ const dispensadoresFiltrados = computed(() => {
   
   console.log('Filtrando dispensadores para sucursal:', newMantenimiento.value.sucursal_id);
   console.log('Total dispensadores disponibles:', dispensadores.value.length);
-  console.log('Dispensadores disponibles:', dispensadores.value);
   
-  const filtrados = dispensadores.value.filter(d => {
-    console.log('Evaluando dispensador:', {
-      id: d.id,
-      modelo: d.modelo,
-      sucursal_id: d.sucursal_id,
-      sucursal: d.sucursal
-    });
-    
-    // Intentar obtener el sucursal_id de diferentes formas
+  const dispensadoresExpandidos = [];
+  
+  dispensadores.value.forEach(d => {
+    // Verificar si el dispensador pertenece a la sucursal seleccionada
     const dispensadorSucursalId = d.sucursal_id || (d.sucursal?.id);
-    const match = dispensadorSucursalId === newMantenimiento.value.sucursal_id;
-    
-    console.log(`Dispensador ${d.id}: sucursal_id=${dispensadorSucursalId}, buscando=${newMantenimiento.value.sucursal_id}, match=${match}`);
-    return match;
+    if (dispensadorSucursalId === newMantenimiento.value.sucursal_id) {
+      // Crear una entrada por cada unidad según la cantidad
+      const cantidad = d.cantidad || 1;
+      for (let i = 0; i < cantidad; i++) {
+        dispensadoresExpandidos.push({
+          ...d,
+          numero_serie_display: `${d.numero_serie} (Unidad ${i + 1} de ${cantidad})`
+        });
+      }
+    }
   });
   
-  console.log('Dispensadores filtrados:', filtrados);
-  return filtrados;
+  console.log('Dispensadores expandidos:', dispensadoresExpandidos);
+  return dispensadoresExpandidos;
 });
 
 const sucursalSeleccionadaDireccion = computed(() => {
@@ -338,12 +395,73 @@ onMounted(async () => {
   }
 });
 
-const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('es-ES', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+const formatDate = (date: string | Date | null) => {
+  if (!date) return 'Fecha no especificada';
+  
+  try {
+    let dateObj: Date;
+    
+    // Si es un número o string numérico (fecha serial de Excel)
+    if (typeof date === 'number' || /^\d{5}$/.test(date.toString())) {
+      const numeroSerial = typeof date === 'number' ? date : parseInt(date.toString());
+      // Convertir número serial de Excel a fecha JavaScript
+      const excelEpoch = new Date(1899, 11, 30);
+      dateObj = new Date(excelEpoch.getTime() + (numeroSerial * 24 * 60 * 60 * 1000));
+    } else if (typeof date === 'string') {
+      dateObj = new Date(date);
+    } else {
+      dateObj = date;
+    }
+
+    // Verificar si es una fecha válida
+    if (isNaN(dateObj.getTime())) {
+      console.error('Fecha inválida:', date);
+      return 'Fecha inválida';
+    }
+
+    // Formatear la fecha en español
+    return new Intl.DateTimeFormat('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(dateObj);
+
+  } catch (error) {
+    console.error('Error al formatear fecha:', error);
+    return 'Error en fecha';
+  }
+};
+
+const formatDateForInput = (date: string | Date | null) => {
+  if (!date) return new Date().toISOString().slice(0, 16);
+  
+  try {
+    let dateObj: Date;
+    
+    // Si es un número o string numérico (fecha serial de Excel)
+    if (typeof date === 'number' || /^\d{5}$/.test(date.toString())) {
+      const numeroSerial = typeof date === 'number' ? date : parseInt(date.toString());
+      // Convertir número serial de Excel a fecha JavaScript
+      const excelEpoch = new Date(1899, 11, 30);
+      dateObj = new Date(excelEpoch.getTime() + (numeroSerial * 24 * 60 * 60 * 1000));
+    } else if (typeof date === 'string') {
+      dateObj = new Date(date);
+    } else {
+      dateObj = date;
+    }
+
+    // Verificar si es una fecha válida
+    if (isNaN(dateObj.getTime())) {
+      console.error('Fecha inválida para input:', date);
+      return new Date().toISOString().slice(0, 16);
+    }
+
+    // Formatear para input datetime-local (YYYY-MM-DDThh:mm)
+    return dateObj.toISOString().slice(0, 16);
+  } catch (error) {
+    console.error('Error al formatear fecha para input:', error);
+    return new Date().toISOString().slice(0, 16);
+  }
 };
 
 const formatEstado = (estado: string) => {
@@ -363,7 +481,7 @@ const openNewMaintenanceModal = () => {
     cliente_id: null,
     sucursal_id: null,
     tecnico_id: null,
-    fechaProgramada: new Date().toISOString().slice(0, 16),
+    fechaProgramada: formatDateForInput(new Date()),
     tipo: 'preventivo',
     estado: 'pendiente',
     descripcion: '',
@@ -377,17 +495,12 @@ const editMantenimiento = (mantenimiento: Mantenimiento) => {
   editingMantenimientoId.value = mantenimiento.id;
   selectedClienteId.value = mantenimiento.cliente_id;
   
-  // Convertir la fecha a string en formato ISO
-  const fechaStr = typeof mantenimiento.fechaProgramada === 'string' 
-    ? new Date(mantenimiento.fechaProgramada).toISOString().slice(0, 16)
-    : mantenimiento.fechaProgramada.toISOString().slice(0, 16);
-
   newMantenimiento.value = {
     dispensador_id: mantenimiento.dispensador_id,
     cliente_id: mantenimiento.cliente_id,
     sucursal_id: mantenimiento.sucursal_id,
     tecnico_id: mantenimiento.tecnico_id,
-    fechaProgramada: fechaStr,
+    fechaProgramada: formatDateForInput(mantenimiento.fechaProgramada),
     tipo: mantenimiento.tipo,
     estado: mantenimiento.estado,
     descripcion: mantenimiento.descripcion,
@@ -427,6 +540,7 @@ const closeModal = () => {
   isEditing.value = false;
   editingMantenimientoId.value = null;
   selectedClienteId.value = null;
+  ultimoMantenimiento.value = null;
   newMantenimiento.value = {
     dispensador_id: null,
     cliente_id: null,
@@ -497,19 +611,48 @@ const getWhatsAppLink = computed(() => {
   const cliente = clientes.value.find(c => c.id === selectedMantenimiento.value.cliente_id);
   const dispensador = dispensadores.value.find(d => d.id === selectedMantenimiento.value.dispensador_id);
 
-  const mensaje = `*Nuevo Mantenimiento Asignado*%0A
------------------------------------%0A
-*Cliente:* ${cliente?.nombre}%0A
-*Sucursal:* ${sucursal?.nombre}%0A
-*Dirección:* ${sucursal?.direccion}%0A
-*Fecha:* ${formatDate(selectedMantenimiento.value.fechaProgramada)}%0A
-*Tipo:* ${selectedMantenimiento.value.tipo}%0A
-*Estado:* ${selectedMantenimiento.value.estado}%0A
-*Dispensador:* ${dispensador?.modelo} - #${dispensador?.numero_serie}%0A
-${selectedMantenimiento.value.descripcion ? `*Descripción:* ${selectedMantenimiento.value.descripcion}%0A` : ''}`;
+  const mensaje = encodeURIComponent(`*Nuevo Mantenimiento Asignado*
+-----------------------------------
+*Cliente:* ${cliente?.nombre}
+*Sucursal:* ${sucursal?.nombre}
+*Dirección:* ${sucursal?.direccion}
+*Fecha:* ${formatDate(selectedMantenimiento.value.fechaProgramada)}
+*Tipo:* ${selectedMantenimiento.value.tipo}
+*Estado:* ${selectedMantenimiento.value.estado}
+*Dispensador:* ${dispensador?.modelo} - #${dispensador?.numero_serie}
+-----------------------------------
+*Detalles del Mantenimiento:*
+${selectedMantenimiento.value.descripcion ? `*Descripción:*
+${selectedMantenimiento.value.descripcion}
+
+` : ''}${selectedMantenimiento.value.observaciones ? `*Observaciones:*
+${selectedMantenimiento.value.observaciones}` : ''}`);
 
   const telefono = tecnico.telefono.replace(/\D/g, '');
   return `https://wa.me/${telefono}?text=${mensaje}`;
+});
+
+// Función para obtener el último mantenimiento
+const obtenerUltimoMantenimiento = async (dispensadorId: number) => {
+  try {
+    const mantenimientosFiltrados = mantenimientos.value
+      .filter(m => m.dispensador_id === dispensadorId)
+      .sort((a, b) => new Date(b.fechaProgramada).getTime() - new Date(a.fechaProgramada).getTime());
+    
+    ultimoMantenimiento.value = mantenimientosFiltrados[0] || null;
+  } catch (error) {
+    console.error('Error al obtener último mantenimiento:', error);
+    ultimoMantenimiento.value = null;
+  }
+};
+
+// Modificar el watch del dispensador_id para obtener el último mantenimiento
+watch(() => newMantenimiento.value.dispensador_id, async (newId) => {
+  if (newId && !isEditing.value) {
+    await obtenerUltimoMantenimiento(newId);
+  } else {
+    ultimoMantenimiento.value = null;
+  }
 });
 </script>
 
@@ -931,5 +1074,100 @@ ${selectedMantenimiento.value.descripcion ? `*Descripción:* ${selectedMantenimi
 
 .sucursal-direccion i {
   color: var(--primary-color);
+}
+
+.sector-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  color: var(--primary-color);
+  font-size: 0.9rem;
+}
+
+.sector-info i {
+  font-size: 0.9rem;
+}
+
+.historial-section {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.historial-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: var(--primary-color);
+}
+
+.historial-header i {
+  font-size: 1.2rem;
+}
+
+.historial-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.historial-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.historial-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.historial-item strong {
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+.historial-item span {
+  color: #212529;
+}
+
+.historial-item p {
+  margin: 0;
+  color: #212529;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.historial-item span.completado {
+  color: #198754;
+}
+
+.historial-item span.pendiente {
+  color: #ffc107;
+}
+
+.historial-item span.en_proceso {
+  color: #0d6efd;
+}
+
+.historial-item span.cancelado {
+  color: #dc3545;
+}
+
+.historial-item span.preventivo {
+  color: #198754;
+}
+
+.historial-item span.correctivo {
+  color: #dc3545;
+}
+
+.historial-item span.emergencia {
+  color: #ffc107;
 }
 </style> 

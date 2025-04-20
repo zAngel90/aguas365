@@ -42,6 +42,7 @@ const dispensadoresController = {
           proximo_mantenimiento: d.proximo_mantenimiento,
           estado: d.estado,
           sector: d.sector || 'Sin sector',
+          cantidad: d.cantidad || 1,
           sucursal_id: d.sucursal_id
         };
 
@@ -107,7 +108,7 @@ const dispensadoresController = {
   create: async (req, res) => {
     try {
       console.log('Iniciando creación de dispensador con datos:', req.body);
-      const { sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector } = req.body;
+      const { sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector, cantidad } = req.body;
       
       // Validar campos requeridos
       if (!sucursal_id || !modelo || !numero_serie) {
@@ -131,11 +132,19 @@ const dispensadoresController = {
           estadosPermitidos
         });
       }
+
+      // Validar cantidad
+      const cantidadFinal = cantidad || 1;
+      if (cantidadFinal < 1) {
+        return res.status(400).json({
+          message: 'La cantidad debe ser al menos 1'
+        });
+      }
       
       console.log('Insertando nuevo dispensador en la base de datos...');
       const [result] = await db.query(
-        'INSERT INTO dispensadores (sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector) VALUES (?, ?, ?, ?, ?, ?)',
-        [sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector]
+        'INSERT INTO dispensadores (sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector, cantidad) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector, cantidadFinal]
       );
       
       console.log('Dispensador creado con ID:', result.insertId);
@@ -151,7 +160,6 @@ const dispensadoresController = {
         code: error.code
       });
       
-      // Manejar errores específicos de SQL
       if (error.code === 'ER_NO_REFERENCED_ROW_2') {
         return res.status(400).json({ 
           message: 'La sucursal especificada no existe',
@@ -181,7 +189,7 @@ const dispensadoresController = {
         datos: req.body
       });
       
-      const { sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector } = req.body;
+      const { sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector, cantidad } = req.body;
       const id = req.params.id;
 
       // Verificar si el dispensador existe
@@ -203,10 +211,17 @@ const dispensadoresController = {
         }
       }
 
+      // Validar cantidad
+      if (cantidad !== undefined && cantidad < 1) {
+        return res.status(400).json({
+          message: 'La cantidad debe ser al menos 1'
+        });
+      }
+
       console.log('Actualizando dispensador en la base de datos...');
       const [result] = await db.query(
-        'UPDATE dispensadores SET sucursal_id = ?, modelo = ?, numero_serie = ?, fecha_instalacion = ?, estado = ?, sector = ? WHERE id = ?',
-        [sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector, id]
+        'UPDATE dispensadores SET sucursal_id = ?, modelo = ?, numero_serie = ?, fecha_instalacion = ?, estado = ?, sector = ?, cantidad = ? WHERE id = ?',
+        [sucursal_id, modelo, numero_serie, fecha_instalacion, estado, sector, cantidad || existingDispensador[0].cantidad, id]
       );
 
       if (result.affectedRows === 0) {
@@ -227,7 +242,6 @@ const dispensadoresController = {
         code: error.code
       });
       
-      // Manejar errores específicos de SQL
       if (error.code === 'ER_NO_REFERENCED_ROW_2') {
         return res.status(400).json({ 
           message: 'La sucursal especificada no existe',

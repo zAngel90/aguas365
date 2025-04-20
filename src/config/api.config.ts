@@ -1,5 +1,5 @@
 // Configuración de la API
-export const API_BASE_URL = 'https://2588-2a02-4780-14-8e60-00-1.ngrok-free.app/api';
+export const API_BASE_URL = 'https://backend56.onrender.com/api';
 
 export const apiConfig = {
   baseURL: API_BASE_URL,

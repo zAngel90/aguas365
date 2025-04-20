@@ -64,6 +64,11 @@
             <i class="fas fa-calendar-alt"></i>
             <span>{{ formatDate(dispensador.fecha_instalacion) }}</span>
           </div>
+
+          <div class="info-item">
+            <i class="fas fa-cubes"></i>
+            <span>Cantidad: {{ dispensador.cantidad || 1 }}</span>
+          </div>
         </div>
 
         <div class="card-actions">
@@ -155,6 +160,15 @@
                 required
               >
             </div>
+            <div class="form-group">
+              <label>Cantidad</label>
+              <input 
+                v-model="newDispensador.cantidad" 
+                type="number" 
+                min="1" 
+                required
+              >
+            </div>
             <div class="modal-actions">
               <button type="button" class="btn-secondary" @click="closeModal">Cancelar</button>
               <button type="submit" class="btn-primary">Guardar</button>
@@ -195,7 +209,8 @@ const newDispensador = ref({
   estado: 'activo' as 'activo' | 'inactivo' | 'mantenimiento',
   sector: '',
   cliente_id: null as number | null,
-  sucursal_id: null as number | null
+  sucursal_id: null as number | null,
+  cantidad: 1
 })
 
 const sucursalesFiltradas = computed(() => {
@@ -247,7 +262,8 @@ function resetForm() {
     estado: 'activo',
     sector: '',
     cliente_id: null,
-    sucursal_id: null
+    sucursal_id: null,
+    cantidad: 1
   }
 }
 
@@ -291,7 +307,8 @@ function editDispensador(dispensador: any) {
     estado: dispensador.estado,
     sector: dispensador.sector || '',
     cliente_id: dispensador.cliente_id,
-    sucursal_id: dispensador.sucursal_id
+    sucursal_id: dispensador.sucursal_id,
+    cantidad: dispensador.cantidad || 1
   }
   
   asignacionTipo.value = dispensador.sucursal_id ? 'sucursal' : 'cliente'

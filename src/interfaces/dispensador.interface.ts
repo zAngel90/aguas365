@@ -14,6 +14,8 @@ export interface Dispensador {
   cliente_id?: number | null
   cliente_nombre?: string
   sucursal_nombre?: string
+  sucursal_direccion?: string
+  cantidad?: number
   sucursal?: Sucursal & {
     cliente?: Cliente
   }

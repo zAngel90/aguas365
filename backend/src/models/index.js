@@ -21,6 +21,7 @@ const defineSucursal = require('./sucursal.model');
 const defineDispensador = require('./dispensador.model');
 const defineMantenimiento = require('./mantenimiento.model');
 const defineTecnico = require('./tecnico.model');
+const defineUsuario = require('./usuario.model');
 
 // Inicializar modelos
 const Cliente = defineCliente(sequelize);
@@ -28,6 +29,7 @@ const Sucursal = defineSucursal(sequelize);
 const Dispensador = defineDispensador(sequelize);
 const Mantenimiento = defineMantenimiento(sequelize);
 const Tecnico = defineTecnico(sequelize);
+const Usuario = defineUsuario(sequelize);
 
 // Definir relaciones
 Cliente.hasMany(Sucursal, {
@@ -107,5 +109,6 @@ module.exports = {
   Sucursal,
   Dispensador,
   Mantenimiento,
-  Tecnico
+  Tecnico,
+  Usuario
 }; 
