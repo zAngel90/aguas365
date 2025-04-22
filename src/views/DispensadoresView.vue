@@ -67,7 +67,10 @@
 
           <div class="info-item">
             <i class="fas fa-cubes"></i>
-            <span>Cantidad: {{ dispensador.cantidad || 1 }}</span>
+            <div class="info-text">
+              <strong>Unidades totales: {{ dispensador.cantidad || 1 }}</strong>
+              <span class="cantidad-detalle">{{ dispensador.cantidad > 1 ? `${dispensador.cantidad} unidades del mismo modelo` : '1 unidad' }}</span>
+            </div>
           </div>
         </div>
 
@@ -286,8 +289,10 @@ async function handleSubmit() {
     }
 
     if (isEditing.value && newDispensador.value.id) {
+      // Actualizamos el dispensador con su cantidad
       await dispensadoresStore.updateDispensador(newDispensador.value.id, newDispensador.value)
     } else {
+      // Creamos un solo dispensador con la cantidad especificada
       await dispensadoresStore.createDispensador(newDispensador.value)
     }
     
@@ -623,5 +628,11 @@ function filterDispensadores() {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.cantidad-detalle {
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
 }
 </style>

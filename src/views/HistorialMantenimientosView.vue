@@ -31,6 +31,17 @@
             <option value="emergencia">Emergencia</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label>Fecha Inicio:</label>
+          <input type="date" v-model="filtroFechaInicio" class="filter-select">
+        </div>
+        <div class="filter-group">
+          <label>Fecha Fin:</label>
+          <input type="date" v-model="filtroFechaFin" class="filter-select">
+        </div>
+      </div>
+      <div class="results-count" v-if="!loading && !error">
+        Mostrando {{ mantenimientosFiltrados.length }} de {{ mantenimientos.length }} mantenimientos
       </div>
     </div>
 
@@ -40,11 +51,13 @@
     
     <div v-else-if="error" class="error">
       <i class="fas fa-exclamation-triangle"></i> {{ error }}
+      <button @click="recargarDatos" class="retry-button">Reintentar</button>
     </div>
     
     <div v-else-if="!mantenimientosFiltrados.length" class="empty-state">
       <i class="fas fa-tools"></i>
       <p>No hay mantenimientos que coincidan con los filtros seleccionados</p>
+      <button @click="resetFiltros" class="reset-button">Resetear filtros</button>
     </div>
     
     <div v-else class="mantenimientos-grid">
@@ -114,12 +127,16 @@ import type { Mantenimiento } from '@/interfaces/mantenimiento.interface'
 
 const mantenimientosStore = useMantenimientosStore()
 const clientesStore = useClientesStore()
-const { mantenimientos, loading, error } = storeToRefs(mantenimientosStore)
+const { mantenimientos } = storeToRefs(mantenimientosStore)
 const { clientes } = storeToRefs(clientesStore)
 
+const loading = ref(false)
+const error = ref('')
 const filtroEstado = ref('')
 const filtroTipo = ref('')
 const filtroCliente = ref('')
+const filtroFechaInicio = ref('')
+const filtroFechaFin = ref('')
 
 const mantenimientosFiltrados = computed(() => {
   let resultado = mantenimientos.value || []
@@ -135,6 +152,20 @@ const mantenimientosFiltrados = computed(() => {
   if (filtroCliente.value) {
     resultado = resultado.filter(m => m.cliente?.id === Number(filtroCliente.value))
   }
+
+  if (filtroFechaInicio.value) {
+    resultado = resultado.filter(m => {
+      const fecha = new Date(m.fechaProgramada)
+      return fecha >= new Date(filtroFechaInicio.value)
+    })
+  }
+
+  if (filtroFechaFin.value) {
+    resultado = resultado.filter(m => {
+      const fecha = new Date(m.fechaProgramada)
+      return fecha <= new Date(filtroFechaFin.value)
+    })
+  }
   
   // Ordenar por fecha de realización (más reciente primero)
   return resultado.sort((a, b) => {
@@ -144,15 +175,36 @@ const mantenimientosFiltrados = computed(() => {
   })
 })
 
-onMounted(async () => {
+const cargarDatos = async () => {
+  loading.value = true
+  error.value = ''
   try {
     await Promise.all([
       mantenimientosStore.fetchMantenimientos(),
       clientesStore.fetchClientes()
     ])
-  } catch (error) {
-    console.error('Error al cargar datos:', error)
+  } catch (err) {
+    error.value = 'Error al cargar los datos. Por favor, intente nuevamente.'
+    console.error('Error al cargar datos:', err)
+  } finally {
+    loading.value = false
   }
+}
+
+const recargarDatos = () => {
+  cargarDatos()
+}
+
+const resetFiltros = () => {
+  filtroEstado.value = ''
+  filtroTipo.value = ''
+  filtroCliente.value = ''
+  filtroFechaInicio.value = ''
+  filtroFechaFin.value = ''
+}
+
+onMounted(() => {
+  cargarDatos()
 })
 
 const formatDate = (date: string) => {
@@ -354,5 +406,41 @@ const formatTipo = (tipo: string) => {
 
 .error {
   color: #EF5350;
+}
+
+.results-count {
+  margin-top: 1rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.retry-button, .reset-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.retry-button:hover, .reset-button:hover {
+  background-color: var(--primary-color-dark);
+}
+
+.filter-group input[type="date"] {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  min-width: 200px;
+  background-color: white;
+}
+
+.filter-group input[type="date"]:focus {
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
 }
 </style> 

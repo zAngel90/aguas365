@@ -1,500 +1,420 @@
 <template>
-  <div class="reportes">
-    <div class="header">
-      <h2 class="page-title">Panel de Reportes</h2>
-      <button class="btn-send-report" @click="openSendReportModal">
-        <i class="fas fa-paper-plane"></i>
-        Enviar Reporte
-      </button>
+  <div class="reportes-container">
+    <div class="page-header">
+      <h1>Historial de Mantenimientos</h1>
+      <div class="filters">
+        <div class="filter-group">
+          <label>Cliente:</label>
+          <select v-model="filtros.cliente" class="filter-select">
+            <option value="">Todos los clientes</option>
+            <option v-for="cliente in clientes" :key="cliente.id" :value="cliente.id">
+              {{ cliente.nombre }}
+            </option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Estado:</label>
+          <select v-model="filtros.estado" class="filter-select">
+            <option value="">Todos los estados</option>
+            <option value="completado">Completados</option>
+            <option value="en_proceso">En Proceso</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="cancelado">Cancelados</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Fecha Desde:</label>
+          <input 
+            type="date" 
+            v-model="filtros.fechaDesde"
+            class="filter-select"
+          >
+        </div>
+        <div class="filter-group">
+          <label>Fecha Hasta:</label>
+          <input 
+            type="date" 
+            v-model="filtros.fechaHasta"
+            class="filter-select"
+          >
+        </div>
+        <button @click="exportarExcel" class="btn-exportar">
+          <i class="fas fa-file-excel"></i> Exportar a Excel
+        </button>
+      </div>
+
+      <div class="results-count" v-if="!loading">
+        Mostrando {{ mantenimientosFiltrados.length }} mantenimientos
+      </div>
+    </div>
+
+    <div v-if="loading" class="loading">
+      <i class="fas fa-spinner fa-spin"></i> Cargando historial...
     </div>
     
-    <div class="report-grid">
-      <div class="report-card">
-        <div class="card-header">
-          <i class="fas fa-calendar-check"></i>
-          <h3>Mantenimientos Pendientes</h3>
-        </div>
-        <div class="chart-container">
-          <canvas ref="mantenimientosChart"></canvas>
-        </div>
-      </div>
+    <div v-else-if="!mantenimientosFiltrados.length" class="empty-state">
+      <i class="fas fa-tools"></i>
+      <p>No hay mantenimientos que coincidan con los filtros seleccionados</p>
+      <button @click="resetFiltros" class="reset-button">Resetear filtros</button>
+    </div>
 
-      <div class="report-card">
-        <div class="card-header">
-          <i class="fas fa-water"></i>
-          <h3>Dispensadores por Cliente</h3>
+    <div v-else class="mantenimientos-grid">
+      <div 
+        v-for="mantenimiento in mantenimientosFiltrados" 
+        :key="mantenimiento.id" 
+        class="mantenimiento-card"
+      >
+        <div class="card-header" :class="mantenimiento.estado">
+          <div class="header-info">
+            <h3>{{ mantenimiento.dispensador?.modelo || 'Sin modelo' }}</h3>
+            <span class="serial">#{{ mantenimiento.dispensador?.numero_serie }}</span>
+          </div>
+          <span class="estado" :class="mantenimiento.estado">
+            {{ formatEstado(mantenimiento.estado) }}
+          </span>
         </div>
-        <div class="chart-container">
-          <canvas ref="dispensadoresChart"></canvas>
+
+        <div class="card-content">
+          <div class="info-item">
+            <i class="fas fa-building"></i>
+            <div class="info-text">
+              <strong>{{ mantenimiento.cliente?.nombre || 'Sin cliente asignado' }}</strong>
+              <span>{{ mantenimiento.sucursal?.nombre || 'Sin sucursal asignada' }}</span>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <i class="fas fa-calendar-alt"></i>
+            <div class="info-text">
+              <span>Programado: {{ formatDate(mantenimiento.fechaProgramada) }}</span>
+              <span v-if="mantenimiento.fechaRealizada" class="fecha-realizada">
+                Realizado: {{ formatDate(mantenimiento.fechaRealizada) }}
+              </span>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <i class="fas fa-info-circle"></i>
+            <div class="info-text">
+              <span class="tipo" :class="mantenimiento.tipo">{{ formatTipo(mantenimiento.tipo) }}</span>
+              <span v-if="mantenimiento.descripcion">{{ mantenimiento.descripcion }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
-    <Modal v-if="showSendReportModal" @close="closeSendReportModal">
-      <template #header>
-        <h3>Enviar Reporte</h3>
-      </template>
-      
-      <template #body>
-        <form @submit.prevent="sendReport" class="report-form">
-          <div class="form-group">
-            <label>Cliente</label>
-            <select v-model="selectedClienteId" @change="handleClienteChange" required>
-              <option :value="null">Seleccionar Cliente...</option>
-              <option v-for="cliente in clientes" :key="cliente.id" :value="cliente.id">
-                {{ cliente.nombre }}
-              </option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Correo del Cliente</label>
-            <input type="email" v-model="selectedClienteEmail" readonly>
-          </div>
-
-          <div class="form-group">
-            <label>Asunto</label>
-            <input type="text" v-model="reportSubject" required placeholder="Asunto del reporte">
-          </div>
-
-          <div class="form-group">
-            <label>Mensaje</label>
-            <textarea 
-              v-model="reportMessage" 
-              required 
-              rows="6"
-              placeholder="Escriba el contenido del reporte aquí..."
-            ></textarea>
-          </div>
-        </form>
-      </template>
-
-      <template #footer>
-        <button class="btn-secondary" @click="closeSendReportModal">Cancelar</button>
-        <button class="btn-primary" @click="sendReport" :disabled="sending">
-          <i class="fas fa-spinner fa-spin" v-if="sending"></i>
-          {{ sending ? 'Enviando...' : 'Enviar Reporte' }}
-        </button>
-      </template>
-    </Modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Chart, registerables } from 'chart.js'
-Chart.register(...registerables)
-import { useReportesStore } from '@/stores/reportes.store'
+import { ref, computed, onMounted } from 'vue'
+import { useMantenimientosStore } from '@/stores/mantenimientos.store'
 import { useClientesStore } from '@/stores/clientes.store'
 import { storeToRefs } from 'pinia'
-import Modal from '../components/Modal.vue'
+import type { Mantenimiento } from '@/interfaces/mantenimiento.interface'
+import * as XLSX from 'xlsx'
 
-interface Cliente {
-  id: number
-  nombre: string
-  email: string
-}
-
-const mantenimientosChart = ref<HTMLCanvasElement | null>(null)
-const dispensadoresChart = ref<HTMLCanvasElement | null>(null)
-const reportesStore = useReportesStore()
+const mantenimientosStore = useMantenimientosStore()
 const clientesStore = useClientesStore()
-const { mantenimientosPendientes, dispensadoresPorCliente } = storeToRefs(reportesStore)
+const { mantenimientos } = storeToRefs(mantenimientosStore)
 const { clientes } = storeToRefs(clientesStore)
 
-// Estado para el modal de envío de reportes
-const showSendReportModal = ref(false)
-const selectedClienteId = ref<number | null>(null)
-const selectedClienteEmail = ref('')
-const reportSubject = ref('')
-const reportMessage = ref('')
-const sending = ref(false)
+const loading = ref(false)
+const filtros = ref({
+  cliente: '',
+  estado: '',
+  fechaDesde: '',
+  fechaHasta: ''
+})
 
-const openSendReportModal = () => {
-  showSendReportModal.value = true
+const mantenimientosFiltrados = computed(() => {
+  let resultado = mantenimientos.value || []
+
+  if (filtros.value.cliente) {
+    resultado = resultado.filter(m => 
+      m.cliente?.id === Number(filtros.value.cliente)
+    )
+  }
+
+  if (filtros.value.estado) {
+    resultado = resultado.filter(m => 
+      m.estado.toLowerCase() === filtros.value.estado.toLowerCase()
+    )
+  }
+
+  if (filtros.value.fechaDesde) {
+    const fechaDesde = new Date(filtros.value.fechaDesde)
+    resultado = resultado.filter(m => new Date(m.fechaProgramada) >= fechaDesde)
+  }
+
+  if (filtros.value.fechaHasta) {
+    const fechaHasta = new Date(filtros.value.fechaHasta)
+    resultado = resultado.filter(m => new Date(m.fechaProgramada) <= fechaHasta)
+  }
+
+  // Ordenar por fecha de más reciente a más antigua
+  return resultado.sort((a, b) => 
+    new Date(b.fechaProgramada).getTime() - new Date(a.fechaProgramada).getTime()
+  )
+})
+
+function formatDate(date: string) {
+  if (!date) return 'Fecha no especificada'
+  return new Date(date).toLocaleDateString('es-ES', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
 }
 
-const closeSendReportModal = () => {
-  showSendReportModal.value = false
-  selectedClienteId.value = null
-  selectedClienteEmail.value = ''
-  reportSubject.value = ''
-  reportMessage.value = ''
+function formatEstado(estado: string) {
+  const estados = {
+    pendiente: 'Pendiente',
+    en_proceso: 'En Proceso',
+    completado: 'Completado',
+    cancelado: 'Cancelado'
+  }
+  return estados[estado] || estado
 }
 
-const handleClienteChange = () => {
-  const cliente = clientes.value.find(c => c.id === selectedClienteId.value)
-  if (cliente) {
-    selectedClienteEmail.value = cliente.email || ''
-  } else {
-    selectedClienteEmail.value = ''
+function formatTipo(tipo: string) {
+  const tipos = {
+    preventivo: 'Preventivo',
+    correctivo: 'Correctivo',
+    emergencia: 'Emergencia'
+  }
+  return tipos[tipo] || tipo
+}
+
+function resetFiltros() {
+  filtros.value = {
+    cliente: '',
+    estado: '',
+    fechaDesde: '',
+    fechaHasta: ''
   }
 }
 
-const sendReport = async () => {
-  if (!selectedClienteId.value || !selectedClienteEmail.value || !reportSubject.value || !reportMessage.value) {
-    alert('Por favor complete todos los campos')
-    return
-  }
+function exportarExcel() {
+  const wb = XLSX.utils.book_new()
   
-  try {
-    sending.value = true
-    const response = await reportesStore.sendReport({
-      clienteId: selectedClienteId.value,
-      email: selectedClienteEmail.value,
-      subject: reportSubject.value,
-      message: reportMessage.value
-    })
+  const datos = mantenimientosFiltrados.value.map(m => ({
+    'Fecha Programada': formatDate(m.fechaProgramada),
+    'Fecha Realizada': m.fechaRealizada ? formatDate(m.fechaRealizada) : '-',
+    'Cliente': m.cliente?.nombre || 'Sin cliente',
+    'Sucursal': m.sucursal?.nombre || 'Sin sucursal',
+    'Dispensador': m.dispensador?.numero_serie || 'Sin número',
+    'Estado': formatEstado(m.estado),
+    'Tipo': formatTipo(m.tipo),
+    'Descripción': m.descripcion || '-'
+  }))
 
-    if (response.success) {
-      alert('Reporte enviado correctamente')
-      closeSendReportModal()
-    } else {
-      throw new Error(response.message || 'Error al enviar el reporte')
-    }
-  } catch (error) {
-    console.error('Error al enviar reporte:', error)
-    alert(error.message || 'Error al enviar el reporte. Por favor intente nuevamente.')
-  } finally {
-    sending.value = false
-  }
+  const ws = XLSX.utils.json_to_sheet(datos)
+  XLSX.utils.book_append_sheet(wb, ws, 'Mantenimientos')
+  XLSX.writeFile(wb, 'historial-mantenimientos.xlsx')
 }
 
 onMounted(async () => {
-  await Promise.all([
-    reportesStore.fetchMantenimientosPendientes(),
-    reportesStore.fetchDispensadoresPorCliente(),
-    clientesStore.fetchClientes()
-  ])
-
-  console.log('Datos de dispensadores por cliente:', dispensadoresPorCliente.value)
-  console.log('Elemento canvas de dispensadores:', dispensadoresChart.value)
-
-  // Crear gráfico de mantenimientos
-  if (mantenimientosChart.value && mantenimientosPendientes.value.length > 0) {
-    new Chart(mantenimientosChart.value, {
-      type: 'line',
-      data: {
-        labels: mantenimientosPendientes.value.map(item => {
-          const [year, month] = item.mes.split('-')
-          const fecha = new Date(parseInt(year), parseInt(month) - 1)
-          return fecha.toLocaleString('es', { month: 'long', year: 'numeric' })
-        }),
-        datasets: [{
-          label: 'Mantenimientos',
-          data: mantenimientosPendientes.value.map(item => item.cantidad),
-          borderColor: 'rgba(54, 162, 235, 1)',
-          backgroundColor: 'rgba(54, 162, 235, 0.1)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: 'rgba(54, 162, 235, 1)',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false
-          },
-          title: {
-            display: true,
-            text: 'Evolución de Mantenimientos Pendientes',
-            font: {
-              size: 16,
-              weight: 'bold'
-            },
-            padding: 20
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: { 
-              stepSize: 1,
-              precision: 0
-            },
-            grid: {
-              color: 'rgba(0, 0, 0, 0.05)'
-            }
-          },
-          x: {
-            grid: {
-              display: false
-            }
-          }
-        }
-      }
-    })
-  }
-
-  // Crear gráfico de dispensadores
-  if (dispensadoresChart.value && dispensadoresPorCliente.value.length > 0) {
-    console.log('Creando gráfico de dispensadores con datos:', {
-      labels: dispensadoresPorCliente.value.map(item => item.cliente),
-      data: dispensadoresPorCliente.value.map(item => item.cantidad)
-    })
-    new Chart(dispensadoresChart.value, {
-      type: 'doughnut',
-      data: {
-        labels: dispensadoresPorCliente.value.map(item => item.cliente),
-        datasets: [{
-          data: dispensadoresPorCliente.value.map(item => item.cantidad),
-          backgroundColor: [
-            'rgba(255, 99, 132, 0.8)',
-            'rgba(54, 162, 235, 0.8)',
-            'rgba(255, 206, 86, 0.8)',
-            'rgba(75, 192, 192, 0.8)',
-            'rgba(153, 102, 255, 0.8)'
-          ],
-          borderColor: '#ffffff',
-          borderWidth: 2
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: {
-              padding: 20,
-              font: {
-                size: 12
-              }
-            }
-          },
-          title: {
-            display: true,
-            text: 'Distribución de Dispensadores',
-            font: {
-              size: 16,
-              weight: 'bold'
-            },
-            padding: 20
-          }
-        },
-        cutout: '60%'
-      }
-    })
-  } else {
-    console.log('No se pudo crear el gráfico de dispensadores porque:', {
-      hasCanvas: !!dispensadoresChart.value,
-      hasData: dispensadoresPorCliente.value.length > 0,
-      dataLength: dispensadoresPorCliente.value.length
-    })
+  loading.value = true
+  try {
+    await Promise.all([
+      mantenimientosStore.fetchMantenimientos(),
+      clientesStore.fetchClientes()
+    ])
+  } catch (error) {
+    console.error('Error al cargar datos:', error)
+  } finally {
+    loading.value = false
   }
 })
 </script>
 
 <style scoped>
-.reportes {
+.reportes-container {
   padding: 2rem;
-  background-color: #f8f9fa;
-  min-height: calc(100vh - 60px);
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.page-header {
   margin-bottom: 2rem;
 }
 
-.btn-send-report {
-  background: var(--primary-color);
-  color: white;
-  border: none;
-  padding: 0.8rem 1.5rem;
-  border-radius: 8px;
+.page-header h1 {
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  font-size: 0.9rem;
+  color: #666;
   font-weight: 500;
+}
+
+.filter-select {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  min-width: 200px;
+}
+
+.btn-exportar {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #4CAF50;
+  color: white;
+  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  height: fit-content;
+  align-self: flex-end;
 }
 
-.btn-send-report:hover {
-  background: var(--primary-color-dark);
-  transform: translateY(-2px);
+.results-count {
+  color: #666;
+  font-size: 0.9rem;
 }
 
-/* Estilos del modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
+.mantenimientos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
 }
 
-.modal {
+.mantenimiento-card {
   background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.modal-header {
-  padding: 1.5rem;
-  background: var(--primary-color);
-  color: white;
-  border-radius: 12px 12px 0 0;
+.mantenimiento-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.card-header {
+  padding: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.modal-header h3 {
+.card-header.pendiente { background: #FFF3E0; }
+.card-header.en_proceso { background: #E3F2FD; }
+.card-header.completado { background: #E8F5E9; }
+.card-header.cancelado { background: #FFEBEE; }
+
+.header-info h3 {
   margin: 0;
-  font-size: 1.4rem;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0;
-}
-
-.modal-body {
-  padding: 1.5rem;
-}
-
-.report-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-group label {
-  font-weight: 500;
-  color: #2c3e50;
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-  padding: 0.8rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
-}
-
-.form-group input:read-only {
-  background-color: #f8f9fa;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.btn-primary,
-.btn-secondary {
-  padding: 0.8rem 1.5rem;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-primary {
-  background: var(--primary-color);
-  color: white;
-  border: none;
-}
-
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: #f8f9fa;
-  color: #2c3e50;
-  border: 1px solid #ddd;
-}
-
-.report-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  gap: 2rem;
-}
-
-.report-card {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  padding: 1.5rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.report-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.card-header i {
-  font-size: 1.5rem;
-  color: #3498db;
-  margin-right: 1rem;
-}
-
-.card-header h3 {
-  color: #2c3e50;
   font-size: 1.2rem;
-  font-weight: 600;
-  margin: 0;
+  color: var(--primary-color);
 }
 
-.chart-container {
-  position: relative;
-  height: 400px;
-  width: 100%;
+.serial {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.estado {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.estado.pendiente { background: #FFA726; color: white; }
+.estado.en_proceso { background: #42A5F5; color: white; }
+.estado.completado { background: #66BB6A; color: white; }
+.estado.cancelado { background: #EF5350; color: white; }
+
+.card-content {
+  padding: 1rem;
+}
+
+.info-item {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-item i {
+  color: #666;
+  width: 20px;
+  text-align: center;
+}
+
+.info-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.fecha-realizada {
+  color: #4CAF50;
+  font-weight: 500;
+}
+
+.tipo {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.tipo.preventivo { background: #E8F5E9; color: #2E7D32; }
+.tipo.correctivo { background: #FFF3E0; color: #F57C00; }
+.tipo.emergencia { background: #FFEBEE; color: #C62828; }
+
+.loading, .empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.loading i, .empty-state i {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.reset-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 @media (max-width: 768px) {
-  .reportes {
-    padding: 1rem;
+  .filters {
+    flex-direction: column;
   }
-
-  .report-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .chart-container {
-    height: 300px;
+  
+  .filter-group {
+    width: 100%;
   }
 }
 </style> 

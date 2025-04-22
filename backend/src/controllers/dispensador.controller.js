@@ -1,11 +1,32 @@
 const { Dispensador, Cliente, Sucursal } = require('../models');
-const { Op } = require('sequelize');
+const { Op, literal } = require('sequelize');
 
 const dispensadorController = {
   async getAll(req, res) {
     try {
       console.log('Iniciando búsqueda de dispensadores');
+      
+      // Primero obtener el total de unidades
+      const totalUnidades = await Dispensador.findOne({
+        attributes: [
+          [literal('SUM(cantidad)'), 'total_unidades']
+        ],
+        where: {
+          estado: 'activo'
+        }
+      });
+      
+      console.log('Total de unidades (sumando cantidad):', totalUnidades.get('total_unidades'));
+
       const dispensadores = await Dispensador.findAll({
+        where: {
+          estado: 'activo'
+        },
+        attributes: {
+          include: [
+            [literal('cantidad'), 'cantidad_dispensador']
+          ]
+        },
         include: [
           {
             model: Cliente,
@@ -28,7 +49,12 @@ const dispensadorController = {
         order: [['created_at', 'DESC']]
       });
 
-      console.log(`Se encontraron ${dispensadores.length} dispensadores`);
+      console.log(`Se encontraron ${dispensadores.length} registros de dispensadores activos`);
+      console.log('Desglose de cantidades:', dispensadores.map(d => ({
+        id: d.id,
+        numero_serie: d.numero_serie,
+        cantidad: d.cantidad
+      })));
 
       // Transformar los datos para incluir nombres planos
       const transformedDispensadores = dispensadores.map(d => {

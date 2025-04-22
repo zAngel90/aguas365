@@ -63,11 +63,11 @@
       <div class="filter-tags">
         <div v-if="filters.clienteId" class="filter-tag">
           Cliente: {{ getClienteName(filters.clienteId) }}
-          <button @click="filters.clienteId = ''">×</button>
+          <button @click="filters.clienteId = null">×</button>
         </div>
         <div v-if="filters.sucursalId" class="filter-tag">
           Sucursal: {{ getBranchName(filters.sucursalId) }}
-          <button @click="filters.sucursalId = ''">×</button>
+          <button @click="filters.sucursalId = null">×</button>
         </div>
         <div v-if="filters.tipo" class="filter-tag">
           Tipo: {{ filters.tipo }}
@@ -178,8 +178,8 @@ const { mantenimientos, loading, error } = storeToRefs(store)
 const selectedMaintenance = ref<Mantenimiento | null>(null)
 
 const filters = ref({
-  clienteId: '',
-  sucursalId: '',
+  clienteId: null as number | null,
+  sucursalId: null as number | null,
   tipo: '',
   estado: ''
 })
@@ -197,13 +197,13 @@ const groupedMaintenances = computed(() => {
     groups[date].push(maintenance)
   })
 
-  // Ordenar por fecha
+  // Ordenar por fecha de más reciente a más antigua
   const sortedGroups: Record<string, Mantenimiento[]> = {}
   Object.keys(groups)
-    .sort()
+    .sort((a, b) => b.localeCompare(a)) // Invertimos el orden para mostrar las más recientes primero
     .forEach(date => {
       sortedGroups[date] = groups[date].sort((a, b) => 
-        a.fechaProgramada.localeCompare(b.fechaProgramada)
+        b.fechaProgramada.localeCompare(a.fechaProgramada) // También invertimos el orden de las horas
       )
     })
 
@@ -262,13 +262,13 @@ const filteredMaintenances = computed(() => {
     groups[date].push(maintenance)
   })
 
-  // Ordenar por fecha y hora
+  // Ordenar por fecha de más reciente a más antigua
   const sortedGroups: Record<string, Mantenimiento[]> = {}
   Object.keys(groups)
-    .sort()
+    .sort((a, b) => b.localeCompare(a)) // Invertimos el orden para mostrar las más recientes primero
     .forEach(date => {
       sortedGroups[date] = groups[date].sort((a, b) => 
-        a.fechaProgramada.localeCompare(b.fechaProgramada)
+        b.fechaProgramada.localeCompare(a.fechaProgramada) // También invertimos el orden de las horas
       )
     })
 
@@ -299,7 +299,7 @@ const closeDetails = () => {
 }
 
 // Funciones auxiliares
-const getClienteName = (id: string) => {
+const getClienteName = (id: number | null) => {
   return uniqueClients.value.find(c => c.id === id)?.nombre || ''
 }
 
