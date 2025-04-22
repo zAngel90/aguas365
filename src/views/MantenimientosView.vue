@@ -16,7 +16,7 @@
     </div>
 
     <div v-else class="mantenimientos-grid">
-      <div v-for="mantenimiento in mantenimientos" :key="mantenimiento.id" class="mantenimiento-card">
+      <div v-for="mantenimiento in mantenimientosPendientes" :key="mantenimiento.id" class="mantenimiento-card">
         <div class="card-header">
           <div class="header-info">
             <h3>Mantenimiento #{{ mantenimiento.id }}</h3>
@@ -302,6 +302,34 @@ const { clientes } = storeToRefs(clientesStore);
 const { sucursales } = storeToRefs(sucursalesStore);
 const { tecnicos } = storeToRefs(tecnicosStore);
 
+// Obtener el año actual o usar 2025 por defecto
+const currentYear = computed(() => {
+  try {
+    return new Date().getFullYear();
+  } catch (error) {
+    console.warn('Error al obtener el año actual, usando 2025 por defecto:', error);
+    return 2025;
+  }
+});
+
+// Agregar computed property para filtrar mantenimientos pendientes
+const mantenimientosPendientes = computed(() => {
+  return mantenimientos.value
+    .filter(m => m.estado === 'pendiente')
+    .map(m => {
+      // Crear una copia del mantenimiento para no modificar el original
+      const fechaAjustada = new Date(m.fechaProgramada);
+      if (fechaAjustada.getFullYear() === 2024) {
+        fechaAjustada.setFullYear(2025);
+      }
+      return {
+        ...m,
+        fechaMostrada: fechaAjustada
+      };
+    })
+    .sort((a, b) => b.fechaMostrada.getTime() - a.fechaMostrada.getTime());
+});
+
 const showModal = ref(false);
 const isEditing = ref(false);
 const editingMantenimientoId = ref<number | null>(null);
@@ -417,6 +445,11 @@ const formatDate = (date: string | Date | null) => {
     if (isNaN(dateObj.getTime())) {
       console.error('Fecha inválida:', date);
       return 'Fecha inválida';
+    }
+
+    // Si el año es 2024, ajustarlo a 2025
+    if (dateObj.getFullYear() === 2024) {
+      dateObj.setFullYear(2025);
     }
 
     // Formatear la fecha en español

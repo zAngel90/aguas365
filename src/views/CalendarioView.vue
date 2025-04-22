@@ -161,6 +161,30 @@
               <span>#{{ selectedMaintenance.dispensador?.numero_serie }}</span>
             </div>
           </div>
+
+          <!-- Sección de observaciones y comentarios -->
+          <div class="comments-section">
+            <div v-if="selectedMaintenance.descripcion" class="info-item">
+              <i class="fas fa-clipboard-list"></i>
+              <div class="info-text">
+                <strong>Comentarios</strong>
+                <span>{{ selectedMaintenance.descripcion }}</span>
+              </div>
+            </div>
+
+            <div v-if="selectedMaintenance.observaciones" class="info-item">
+              <i class="fas fa-clipboard-check"></i>
+              <div class="info-text">
+                <strong>Observaciones</strong>
+                <span>{{ selectedMaintenance.observaciones }}</span>
+              </div>
+            </div>
+
+            <div v-if="!selectedMaintenance.descripcion && !selectedMaintenance.observaciones" class="no-comments">
+              <i class="fas fa-comment-slash"></i>
+              <p>No hay comentarios ni observaciones registradas</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -238,7 +262,10 @@ const filteredBranches = computed(() => {
 
 // Verificar si hay filtros activos
 const hasActiveFilters = computed(() => {
-  return Object.values(filters.value).some(value => value !== '')
+  return filters.value.clienteId !== null || 
+         filters.value.sucursalId !== null || 
+         filters.value.tipo !== '' || 
+         filters.value.estado !== ''
 })
 
 // Mantenimientos filtrados
@@ -246,10 +273,10 @@ const filteredMaintenances = computed(() => {
   if (!mantenimientos.value) return {}
 
   const filtered = mantenimientos.value.filter(m => {
-    if (filters.value.clienteId && m.cliente?.id !== filters.value.clienteId) return false
-    if (filters.value.sucursalId && m.sucursal?.id !== filters.value.sucursalId) return false
-    if (filters.value.tipo && m.tipo !== filters.value.tipo) return false
-    if (filters.value.estado && m.estado !== filters.value.estado) return false
+    if (filters.value.clienteId !== null && m.cliente?.id !== filters.value.clienteId) return false
+    if (filters.value.sucursalId !== null && m.sucursal?.id !== filters.value.sucursalId) return false
+    if (filters.value.tipo && m.tipo !== filters.value.tipo.toLowerCase()) return false
+    if (filters.value.estado && m.estado !== filters.value.estado.toLowerCase()) return false
     return true
   })
 
@@ -303,14 +330,14 @@ const getClienteName = (id: number | null) => {
   return uniqueClients.value.find(c => c.id === id)?.nombre || ''
 }
 
-const getBranchName = (id: string) => {
+const getBranchName = (id: number | null) => {
   return filteredBranches.value.find(b => b.id === id)?.nombre || ''
 }
 
 const clearFilters = () => {
   filters.value = {
-    clienteId: '',
-    sucursalId: '',
+    clienteId: null,
+    sucursalId: null,
     tipo: '',
     estado: ''
   }
@@ -662,5 +689,63 @@ onMounted(async () => {
 .no-results p {
   font-size: 1.2rem;
   margin: 0;
+}
+
+.comments-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #eee;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.info-item i {
+  color: var(--primary-color);
+  font-size: 1.1rem;
+  width: 20px;
+  text-align: center;
+}
+
+.info-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.info-text strong {
+  color: #2c3e50;
+  font-size: 0.9rem;
+}
+
+.info-text span {
+  color: #666;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.no-comments {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.no-comments i {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.no-comments p {
+  margin: 0;
+  font-size: 1rem;
 }
 </style> 
