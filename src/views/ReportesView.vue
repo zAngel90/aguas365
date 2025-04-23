@@ -15,9 +15,11 @@
         <div class="filter-group">
           <label>Estado:</label>
           <select v-model="filtros.estado" class="filter-select">
-            <option value="">Todos</option>
-            <option value="pendiente">Pendientes</option>
+            <option value="">Todos los estados</option>
+            <option value="completado">Completados</option>
             <option value="en_proceso">En Proceso</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="cancelado">Cancelados</option>
           </select>
         </div>
         <div class="filter-group">
@@ -126,10 +128,7 @@ const filtros = ref({
 })
 
 const mantenimientosFiltrados = computed(() => {
-  // Primero filtrar solo pendientes y en proceso
-  let resultado = (mantenimientos.value || []).filter(m => 
-    m.estado === 'pendiente' || m.estado === 'en_proceso'
-  )
+  let resultado = mantenimientos.value || []
 
   if (filtros.value.cliente) {
     resultado = resultado.filter(m => 
@@ -161,30 +160,19 @@ const mantenimientosFiltrados = computed(() => {
 
 function formatDate(date: string) {
   if (!date) return 'Fecha no especificada'
-  
-  try {
-    const dateObj = new Date(date)
-    
-    // Si el año es 2024, ajustarlo a 2025
-    if (dateObj.getFullYear() === 2024) {
-      dateObj.setFullYear(2025)
-    }
-    
-    return dateObj.toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  } catch (error) {
-    console.error('Error al formatear fecha:', error)
-    return 'Fecha no especificada'
-  }
+  return new Date(date).toLocaleDateString('es-ES', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
 }
 
 function formatEstado(estado: string) {
   const estados = {
     pendiente: 'Pendiente',
-    en_proceso: 'En Proceso'
+    en_proceso: 'En Proceso',
+    completado: 'Completado',
+    cancelado: 'Cancelado'
   }
   return estados[estado] || estado
 }
@@ -210,22 +198,16 @@ function resetFiltros() {
 function exportarExcel() {
   const wb = XLSX.utils.book_new()
   
-  const datos = mantenimientosFiltrados.value.map(m => {
-    const fecha = new Date(m.fechaProgramada)
-    if (fecha.getFullYear() === 2024) {
-      fecha.setFullYear(2025)
-    }
-    
-    return {
-      'Fecha Programada': formatDate(fecha.toISOString()),
-      'Cliente': m.cliente?.nombre || 'Sin cliente',
-      'Sucursal': m.sucursal?.nombre || 'Sin sucursal',
-      'Dispensador': m.dispensador?.numero_serie || 'Sin número',
-      'Estado': formatEstado(m.estado),
-      'Tipo': formatTipo(m.tipo),
-      'Descripción': m.descripcion || '-'
-    }
-  })
+  const datos = mantenimientosFiltrados.value.map(m => ({
+    'Fecha Programada': formatDate(m.fechaProgramada),
+    'Fecha Realizada': m.fechaRealizada ? formatDate(m.fechaRealizada) : '-',
+    'Cliente': m.cliente?.nombre || 'Sin cliente',
+    'Sucursal': m.sucursal?.nombre || 'Sin sucursal',
+    'Dispensador': m.dispensador?.numero_serie || 'Sin número',
+    'Estado': formatEstado(m.estado),
+    'Tipo': formatTipo(m.tipo),
+    'Descripción': m.descripcion || '-'
+  }))
 
   const ws = XLSX.utils.json_to_sheet(datos)
   XLSX.utils.book_append_sheet(wb, ws, 'Mantenimientos')

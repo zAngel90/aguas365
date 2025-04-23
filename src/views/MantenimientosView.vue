@@ -2,9 +2,17 @@
   <div class="mantenimientos-container">
     <div class="header">
       <h1>Gestión de Mantenimientos</h1>
-      <button class="btn-primary" @click="openNewMaintenanceModal">
-        <i class="fas fa-plus"></i> Nuevo Mantenimiento
-      </button>
+      <div class="header-actions">
+        <button v-if="selectedMantenimientos.length > 0" 
+                class="btn-danger" 
+                @click="deleteSelectedMantenimientos">
+          <i class="fas fa-trash"></i> 
+          Eliminar {{ selectedMantenimientos.length }} seleccionados
+        </button>
+        <button class="btn-primary" @click="openNewMaintenanceModal">
+          <i class="fas fa-plus"></i> Nuevo Mantenimiento
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="loading">
@@ -16,7 +24,15 @@
     </div>
 
     <div v-else class="mantenimientos-grid">
-      <div v-for="mantenimiento in mantenimientosPendientes" :key="mantenimiento.id" class="mantenimiento-card">
+      <div v-for="mantenimiento in mantenimientosFiltrados" 
+           :key="mantenimiento.id" 
+           class="mantenimiento-card"
+           :class="{ 'selected': selectedMantenimientos.includes(mantenimiento.id) }">
+        <div class="card-selection">
+          <input type="checkbox" 
+                 :checked="selectedMantenimientos.includes(mantenimiento.id)"
+                 @change="toggleSelection(mantenimiento.id)">
+        </div>
         <div class="card-header">
           <div class="header-info">
             <h3>Mantenimiento #{{ mantenimiento.id }}</h3>
@@ -313,15 +329,11 @@ const currentYear = computed(() => {
 });
 
 // Agregar computed property para filtrar mantenimientos pendientes
-const mantenimientosPendientes = computed(() => {
+const mantenimientosFiltrados = computed(() => {
   return mantenimientos.value
-    .filter(m => m.estado === 'pendiente')
+    .filter(m => m.estado === 'pendiente' || m.estado === 'en_proceso')
     .map(m => {
-      // Crear una copia del mantenimiento para no modificar el original
       const fechaAjustada = new Date(m.fechaProgramada);
-      if (fechaAjustada.getFullYear() === 2024) {
-        fechaAjustada.setFullYear(2025);
-      }
       return {
         ...m,
         fechaMostrada: fechaAjustada
@@ -396,6 +408,8 @@ const sucursalSeleccionadaDireccion = computed(() => {
   const sucursal = sucursales.value.find(s => s.id === newMantenimiento.value.sucursal_id);
   return sucursal?.direccion || '';
 });
+
+const selectedMantenimientos = ref<number[]>([]);
 
 onMounted(async () => {
   console.log('Iniciando carga de datos en MantenimientosView...');
@@ -687,6 +701,31 @@ watch(() => newMantenimiento.value.dispensador_id, async (newId) => {
     ultimoMantenimiento.value = null;
   }
 });
+
+const toggleSelection = (id: number) => {
+  const index = selectedMantenimientos.value.indexOf(id);
+  if (index === -1) {
+    selectedMantenimientos.value.push(id);
+  } else {
+    selectedMantenimientos.value.splice(index, 1);
+  }
+};
+
+const deleteSelectedMantenimientos = async () => {
+  if (!selectedMantenimientos.value.length) return;
+
+  if (confirm(`¿Está seguro de que desea eliminar ${selectedMantenimientos.value.length} mantenimientos?`)) {
+    try {
+      for (const id of selectedMantenimientos.value) {
+        await mantenimientosStore.deleteMantenimiento(id);
+      }
+      selectedMantenimientos.value = []; // Limpiar selección
+      await mantenimientosStore.fetchMantenimientos(); // Recargar lista
+    } catch (error) {
+      console.error('Error al eliminar mantenimientos:', error);
+    }
+  }
+};
 </script>
 
 <style scoped>
@@ -709,6 +748,30 @@ watch(() => newMantenimiento.value.dispensador_id, async (newId) => {
   font-size: 1.8rem;
 }
 
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+}
+
+.btn-danger:hover {
+  background: #c82333;
+}
+
 .mantenimientos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -722,6 +785,7 @@ watch(() => newMantenimiento.value.dispensador_id, async (newId) => {
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
 }
 
 .mantenimiento-card:hover {
@@ -1202,5 +1266,27 @@ watch(() => newMantenimiento.value.dispensador_id, async (newId) => {
 
 .historial-item span.emergencia {
   color: #ffc107;
+}
+
+.card-selection {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2;
+}
+
+.card-selection input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.mantenimiento-card.selected {
+  border: 2px solid var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+}
+
+.mantenimiento-card:hover .card-selection {
+  opacity: 1;
 }
 </style> 

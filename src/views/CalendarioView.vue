@@ -213,25 +213,34 @@ const groupedMaintenances = computed(() => {
 
   const groups: Record<string, Mantenimiento[]> = {}
   
-  mantenimientos.value.forEach(maintenance => {
-    const date = maintenance.fechaProgramada.split('T')[0]
-    if (!groups[date]) {
-      groups[date] = []
-    }
-    groups[date].push(maintenance)
-  })
+  // Filtrar los mantenimientos excluyendo específicamente el 30/12
+  const filteredMaintenances = mantenimientos.value.filter(maintenance => {
+    const date = new Date(maintenance.fechaProgramada);
+    const day = date.getDate();
+    const month = date.getMonth();
+    return !(day === 30 && month === 11);
+  });
 
-  // Ordenar por fecha de más reciente a más antigua
-  const sortedGroups: Record<string, Mantenimiento[]> = {}
+  // Procesar los mantenimientos filtrados
+  filteredMaintenances.forEach(maintenance => {
+    const dateKey = maintenance.fechaProgramada.split('T')[0];
+    
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(maintenance);
+  });
+
+  const sortedGroups: Record<string, Mantenimiento[]> = {};
   Object.keys(groups)
-    .sort((a, b) => b.localeCompare(a)) // Invertimos el orden para mostrar las más recientes primero
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
     .forEach(date => {
       sortedGroups[date] = groups[date].sort((a, b) => 
-        b.fechaProgramada.localeCompare(a.fechaProgramada) // También invertimos el orden de las horas
-      )
-    })
+        b.fechaProgramada.localeCompare(a.fechaProgramada)
+      );
+    });
 
-  return sortedGroups
+  return sortedGroups;
 })
 
 // Obtener clientes únicos de los mantenimientos
@@ -273,48 +282,55 @@ const filteredMaintenances = computed(() => {
   if (!mantenimientos.value) return {}
 
   const filtered = mantenimientos.value.filter(m => {
-    if (filters.value.clienteId !== null && m.cliente?.id !== filters.value.clienteId) return false
-    if (filters.value.sucursalId !== null && m.sucursal?.id !== filters.value.sucursalId) return false
-    if (filters.value.tipo && m.tipo !== filters.value.tipo.toLowerCase()) return false
-    if (filters.value.estado && m.estado !== filters.value.estado.toLowerCase()) return false
-    return true
-  })
+    // Primero excluir específicamente el 30/12
+    const date = new Date(m.fechaProgramada);
+    const day = date.getDate();
+    const month = date.getMonth();
+    if (day === 30 && month === 11) return false;
 
-  const groups: Record<string, Mantenimiento[]> = {}
+    // Luego aplicar el resto de filtros
+    if (filters.value.clienteId !== null && m.cliente?.id !== filters.value.clienteId) return false;
+    if (filters.value.sucursalId !== null && m.sucursal?.id !== filters.value.sucursalId) return false;
+    if (filters.value.tipo && m.tipo !== filters.value.tipo.toLowerCase()) return false;
+    if (filters.value.estado && m.estado !== filters.value.estado.toLowerCase()) return false;
+    return true;
+  });
+
+  const groups: Record<string, Mantenimiento[]> = {};
   filtered.forEach(maintenance => {
-    const date = maintenance.fechaProgramada.split('T')[0]
-    if (!groups[date]) {
-      groups[date] = []
+    const dateKey = maintenance.fechaProgramada.split('T')[0];
+    
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
     }
-    groups[date].push(maintenance)
-  })
+    groups[dateKey].push(maintenance);
+  });
 
-  // Ordenar por fecha de más reciente a más antigua
-  const sortedGroups: Record<string, Mantenimiento[]> = {}
+  const sortedGroups: Record<string, Mantenimiento[]> = {};
   Object.keys(groups)
-    .sort((a, b) => b.localeCompare(a)) // Invertimos el orden para mostrar las más recientes primero
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
     .forEach(date => {
       sortedGroups[date] = groups[date].sort((a, b) => 
-        b.fechaProgramada.localeCompare(a.fechaProgramada) // También invertimos el orden de las horas
-      )
-    })
+        b.fechaProgramada.localeCompare(a.fechaProgramada)
+      );
+    });
 
-  return sortedGroups
+  return sortedGroups;
 })
 
 const formatDateHeader = (date: string) => {
-  const [year, month, day] = date.split('-')
-  return `${day}/${month}/${year}`
+  const [year, month, day] = date.split('-');
+  return `${day}/${month}/${year}`;
 }
 
 const formatTime = (date: string) => {
-  return date.split('T')[1].substring(0, 5)
+  return date.split('T')[1].substring(0, 5);
 }
 
 const formatFullDate = (date: string) => {
-  const [datePart, timePart] = date.split('T')
-  const [year, month, day] = datePart.split('-')
-  return `${day}/${month}/${year} ${timePart.substring(0, 5)}`
+  const [datePart, timePart] = date.split('T');
+  const [year, month, day] = datePart.split('-');
+  return `${day}/${month}/${year} ${timePart.substring(0, 5)}`;
 }
 
 const showDetails = (maintenance: Mantenimiento) => {

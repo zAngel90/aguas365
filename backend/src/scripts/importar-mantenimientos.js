@@ -6,13 +6,19 @@ const moment = require('moment');
 // Función para convertir fecha de Excel a JavaScript
 function convertExcelDate(excelDate) {
   try {
-    // Si la fecha ya está en formato string (ej: "1/9/24")
+    // Si la fecha ya está en formato string (ej: "16/04/2025" o "1/9/24")
     if (typeof excelDate === 'string' && excelDate.includes('/')) {
-      const [month, day, year] = excelDate.split('/');
-      // Ajustar el año a formato completo (2024 en lugar de 24)
-      const fullYear = parseInt(year) + 2000;
+      const parts = excelDate.split('/');
+      const month = parseInt(parts[0]);
+      const day = parseInt(parts[1]);
+      const year = parts[2];
+
       // Crear la fecha (los meses en JavaScript son 0-based)
-      const date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
+      const date = new Date(year.length === 2 ? `20${year}` : year, month - 1, day);
+      
+      // Log para debug
+      console.log(`Convirtiendo fecha: ${excelDate} -> ${date.toISOString()}`);
+      
       return date;
     }
 
@@ -55,80 +61,72 @@ async function importarMantenimientos(filePath) {
       console.log('Encabezados encontrados:', Object.keys(data[0]));
     }
 
-    // Filtrar solo los registros de FARMASHOP
-    const farmashopData = data.filter(row => {
-      // Buscar en todas las columnas que puedan contener el nombre del cliente
-      const cliente = row['CLIENTE'] || row['NOMBRE'] || row['RAZON SOCIAL'] || '';
-      console.log('Revisando fila:', cliente);
-      return cliente.toUpperCase().trim() === 'FARMASHOP';
-    });
-
-    console.log(`Se encontraron ${farmashopData.length} registros de FARMASHOP`);
-    console.log('Primeros registros encontrados:', farmashopData.slice(0, 3));
-
     // Variables para mantener el último valor no vacío
     let ultimaFecha = null;
-    let ultimoCliente = null;
-    let ultimoNroCliente = null;
 
-    for (const row of farmashopData) {
+    for (const row of data) {
       try {
+        // Obtener el nombre del cliente del Excel
+        const nombreCliente = row['CLIENTE'] || '';
+        if (!nombreCliente) {
+          console.log('Fila sin nombre de cliente, saltando...');
+          continue;
+        }
+
         // Heredar valores de filas anteriores si están vacíos
         const fechaStr = row['FECHA'] || ultimaFecha;
-        const cliente = 'FARMASHOP'; // Forzar el nombre a FARMASHOP
-        const nroCliente = row['Nro. CLIENTE'] || ultimoNroCliente;
-
-        // Actualizar los últimos valores si no están vacíos
+        
+        // Actualizar el último valor de fecha si no está vacío
         if (row['FECHA']) ultimaFecha = row['FECHA'];
-        if (row['Nro. CLIENTE']) ultimoNroCliente = row['Nro. CLIENTE'];
 
         // Convertir la fecha de Excel a formato MySQL
         const fecha = convertExcelDate(fechaStr);
-        console.log(`Procesando FARMASHOP - Cliente: ${cliente}, Fecha original: ${fechaStr}, Fecha convertida: ${fecha.toISOString()}`);
+        console.log(`Procesando cliente: ${nombreCliente}, Fecha original: ${fechaStr}, Fecha convertida: ${fecha.toISOString()}`);
 
-        // Buscar o crear el cliente
-        const [clienteObj] = await Cliente.findOrCreate({
-          where: { 
-            nombre: 'FARMASHOP' // Buscar específicamente por el nombre FARMASHOP
-          },
-          defaults: {
-            nombre: 'FARMASHOP',
-            email: 'farmashop@default.com',
-            telefono: row['TELEFONO'] || 'No especificado',
-            direccion: row['DIRECCION'] || 'No especificada'
+        // Buscar el cliente por nombre
+        const cliente = await Cliente.findOne({
+          where: {
+            nombre: {
+              [Op.like]: `%${nombreCliente}%`
+            }
           }
         });
+
+        if (!cliente) {
+          console.log(`Cliente no encontrado: ${nombreCliente}, saltando registro...`);
+          continue;
+        }
 
         // Buscar o crear sucursal
         let sucursal;
         if (!row.DIRECCION) {
           [sucursal] = await Sucursal.findOrCreate({
             where: { 
-              nombre: 'Sucursal no especificada',
-              cliente_id: clienteObj.id
+              nombre: 'Sucursal principal',
+              cliente_id: cliente.id
             },
             defaults: {
-              nombre: 'Sucursal no especificada',
+              nombre: 'Sucursal principal',
               direccion: 'No especificada',
               telefono: 'No especificado',
-              email: `sucursal.${clienteObj.id}@importacion.temp`,
-              nif: `NO-SPEC-${clienteObj.id}`,
-              cliente_id: clienteObj.id
+              email: `sucursal.${cliente.id}@importacion.temp`,
+              nif: `NO-SPEC-${cliente.id}`,
+              cliente_id: cliente.id
             }
           });
         } else {
           [sucursal] = await Sucursal.findOrCreate({
             where: { 
               direccion: row.DIRECCION,
-              cliente_id: clienteObj.id
+              cliente_id: cliente.id
             },
             defaults: {
               nombre: row.SUCURSAL || `Sucursal ${row.DIRECCION}`,
               direccion: row.DIRECCION,
               telefono: 'No especificado',
-              email: `sucursal.${clienteObj.id}.${Date.now()}@importacion.temp`,
+              email: `sucursal.${cliente.id}.${Date.now()}@importacion.temp`,
               nif: `AUTO-${Date.now()}`,
-              cliente_id: clienteObj.id
+              cliente_id: cliente.id
             }
           });
         }
@@ -137,21 +135,20 @@ async function importarMantenimientos(filePath) {
         const mantenimientoExistente = await Mantenimiento.findOne({
           where: {
             fechaProgramada: fecha,
-            cliente_id: clienteObj.id,
+            cliente_id: cliente.id,
             sucursal_id: sucursal.id,
             descripcion: row.COMENTARIOS || 'Sin comentarios'
           }
         });
 
         if (mantenimientoExistente) {
-          console.log(`Mantenimiento ya existe para FARMASHOP - Cliente: ${clienteObj.id}, Sucursal: ${sucursal.id}, Fecha: ${fecha.toISOString()}`);
-          // No usamos continue aquí para poder ver todos los registros
+          console.log(`Mantenimiento ya existe para ${nombreCliente} - Cliente: ${cliente.id}, Sucursal: ${sucursal.id}, Fecha: ${fecha.toISOString()}`);
         } else {
           // Buscar o crear dispensador
           const [dispensador] = await Dispensador.findOrCreate({
             where: {
               sucursal_id: sucursal.id,
-              numero_serie: `IMP-${clienteObj.id}-${sucursal.id}`
+              numero_serie: `IMP-${cliente.id}-${sucursal.id}`
             },
             defaults: {
               modelo: 'Importado',
@@ -159,11 +156,11 @@ async function importarMantenimientos(filePath) {
               estado: 'activo',
               sector: row.SUCURSAL || 'No especificado',
               sucursal_id: sucursal.id,
-              cliente_id: clienteObj.id
+              cliente_id: cliente.id
             }
           });
 
-          // Crear el mantenimiento
+          // Crear el mantenimiento como completado
           const mantenimiento = await Mantenimiento.create({
             fechaProgramada: fecha,
             fechaRealizada: fecha,
@@ -171,21 +168,21 @@ async function importarMantenimientos(filePath) {
             tipo: 'correctivo',
             descripcion: row.COMENTARIOS || 'Sin comentarios',
             observaciones: row.SOLUCION || 'Sin observaciones',
-            cliente_id: clienteObj.id,
+            cliente_id: cliente.id,
             sucursal_id: sucursal.id,
             dispensador_id: dispensador.id,
             tecnico_id: 1
           });
 
-          console.log(`Nuevo mantenimiento creado para FARMASHOP - ID: ${mantenimiento.id}, Fecha: ${fecha.toISOString()}`);
+          console.log(`Nuevo mantenimiento creado para ${nombreCliente} - ID: ${mantenimiento.id}, Fecha: ${fecha.toISOString()}`);
         }
       } catch (error) {
-        console.error('Error procesando registro de FARMASHOP:', error);
+        console.error('Error procesando registro:', error);
         console.error('Datos del registro:', row);
       }
     }
 
-    console.log('Procesamiento de registros de FARMASHOP completado');
+    console.log('Procesamiento de registros completado');
   } catch (error) {
     console.error('Error general:', error);
   }
