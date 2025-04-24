@@ -9,13 +9,38 @@
     </div>
     
     <div class="search-bar">
-      <i class="fas fa-search"></i>
-      <input 
-        type="text" 
-        v-model="searchQuery" 
-        placeholder="Buscar por nombre de cliente..."
-        @input="filterDispensadores"
-      >
+      <div class="search-filters">
+        <div class="filter-group">
+          <label>Cliente:</label>
+          <select v-model="filtroCliente" @change="handleClienteFilterChange">
+            <option value="">Todos los clientes</option>
+            <option v-for="cliente in clientes" :key="cliente.id" :value="cliente.id">
+              {{ cliente.nombre }}
+            </option>
+          </select>
+        </div>
+        <div class="filter-group" v-if="filtroCliente">
+          <label>Sucursal:</label>
+          <select v-model="filtroSucursal">
+            <option value="">Todas las sucursales</option>
+            <option v-for="sucursal in sucursalesFiltradas" :key="sucursal.id" :value="sucursal.id">
+              {{ sucursal.nombre }}
+            </option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Búsqueda:</label>
+          <div class="search-input">
+            <i class="fas fa-search"></i>
+            <input 
+              type="text" 
+              v-model="searchQuery" 
+              placeholder="Buscar por modelo o número de serie..."
+              @input="filterDispensadores"
+            >
+          </div>
+        </div>
+      </div>
     </div>
     
     <div v-if="loading" class="loading">
@@ -202,6 +227,8 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const asignacionTipo = ref('cliente')
 const selectedClienteId = ref<number | null>(null)
+const filtroCliente = ref<number | null>(null)
+const filtroSucursal = ref<number | null>(null)
 const searchQuery = ref('')
 
 const newDispensador = ref({
@@ -217,18 +244,45 @@ const newDispensador = ref({
 })
 
 const sucursalesFiltradas = computed(() => {
-  if (!selectedClienteId.value) return []
-  return sucursales.value?.filter(s => s.cliente_id === selectedClienteId.value) || []
+  if (!filtroCliente.value) return []
+  return sucursales.value?.filter(s => s.cliente_id === filtroCliente.value) || []
 })
 
+const handleClienteFilterChange = () => {
+  filtroSucursal.value = null
+  filterDispensadores()
+}
+
 const filteredDispensadores = computed(() => {
-  if (!searchQuery.value) return dispensadores.value;
+  let resultado = dispensadores.value
   
-  const query = searchQuery.value.toLowerCase();
-  return dispensadores.value.filter(dispensador => {
-    const clienteNombre = dispensador.cliente_nombre?.toLowerCase() || '';
-    return clienteNombre.includes(query);
-  });
+  // Filtrar por cliente
+  if (filtroCliente.value) {
+    resultado = resultado.filter(dispensador => {
+      const dispensadorClienteId = dispensador.cliente_id || (dispensador.sucursal?.cliente_id)
+      return dispensadorClienteId === filtroCliente.value
+    })
+  }
+  
+  // Filtrar por sucursal
+  if (filtroSucursal.value) {
+    resultado = resultado.filter(dispensador => {
+      const dispensadorSucursalId = dispensador.sucursal_id || (dispensador.sucursal?.id)
+      return dispensadorSucursalId === filtroSucursal.value
+    })
+  }
+  
+  // Filtrar por búsqueda de texto
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    resultado = resultado.filter(dispensador => {
+      const modelo = dispensador.modelo?.toLowerCase() || ''
+      const numeroSerie = dispensador.numero_serie?.toLowerCase() || ''
+      return modelo.includes(query) || numeroSerie.includes(query)
+    })
+  }
+  
+  return resultado
 })
 
 onMounted(async () => {
@@ -603,11 +657,53 @@ function filterDispensadores() {
 
 .search-bar {
   margin: 1rem 0;
-  position: relative;
-  max-width: 500px;
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.search-bar i {
+.search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 200px;
+}
+
+.filter-group label {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.filter-group select {
+  padding: 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background-color: white;
+  cursor: pointer;
+}
+
+.filter-group select:focus {
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.search-input {
+  position: relative;
+  flex: 1;
+}
+
+.search-input i {
   position: absolute;
   left: 12px;
   top: 50%;
@@ -615,18 +711,18 @@ function filterDispensadores() {
   color: #666;
 }
 
-.search-bar input {
+.search-input input {
   width: 100%;
-  padding: 12px 12px 12px 40px;
+  padding: 0.6rem 0.6rem 0.6rem 40px;
   border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
   transition: border-color 0.3s;
 }
 
-.search-bar input:focus {
-  outline: none;
+.search-input input:focus {
   border-color: var(--primary-color);
+  outline: none;
   box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
 }
 
