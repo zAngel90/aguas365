@@ -5,10 +5,19 @@
       <div class="filters">
         <div class="filter-group">
           <label>Cliente:</label>
-          <select v-model="filtroCliente" class="filter-select">
+          <select v-model="filtroCliente" @change="handleClienteFilterChange" class="filter-select">
             <option value="">Todos los clientes</option>
             <option v-for="cliente in clientes" :key="cliente.id" :value="cliente.id">
               {{ cliente.nombre }}
+            </option>
+          </select>
+        </div>
+        <div class="filter-group" v-if="filtroCliente">
+          <label>Sucursal:</label>
+          <select v-model="filtroSucursal" class="filter-select">
+            <option value="">Todas las sucursales</option>
+            <option v-for="sucursal in sucursalesFiltradas" :key="sucursal.id" :value="sucursal.id">
+              {{ sucursal.nombre }}
             </option>
           </select>
         </div>
@@ -193,6 +202,7 @@
 import { onMounted, computed, ref } from 'vue'
 import { useMantenimientosStore } from '@/stores/mantenimientos.store'
 import { useClientesStore } from '@/stores/clientes.store'
+import { useSucursalesStore } from '@/stores/sucursales.store'
 import { storeToRefs } from 'pinia'
 import type { Mantenimiento } from '@/interfaces/mantenimiento.interface'
 import { useRouter } from 'vue-router'
@@ -200,19 +210,42 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const mantenimientosStore = useMantenimientosStore()
 const clientesStore = useClientesStore()
+const sucursalesStore = useSucursalesStore()
+
 const { mantenimientos } = storeToRefs(mantenimientosStore)
 const { clientes } = storeToRefs(clientesStore)
+const { sucursales } = storeToRefs(sucursalesStore)
 
 const loading = ref(false)
 const error = ref('')
 const filtroEstado = ref('')
 const filtroTipo = ref('')
-const filtroCliente = ref('')
+const filtroCliente = ref<number | null>(null)
+const filtroSucursal = ref<number | null>(null)
 const filtroFechaInicio = ref('')
 const filtroFechaFin = ref('')
 
+const sucursalesFiltradas = computed(() => {
+  if (!filtroCliente.value) return []
+  return sucursales.value?.filter(s => s.cliente_id === filtroCliente.value) || []
+})
+
+const handleClienteFilterChange = () => {
+  filtroSucursal.value = null
+}
+
 const mantenimientosFiltrados = computed(() => {
   let resultado = mantenimientos.value || []
+  
+  // Filtrar por cliente
+  if (filtroCliente.value) {
+    resultado = resultado.filter(m => m.cliente?.id === filtroCliente.value)
+  }
+  
+  // Filtrar por sucursal
+  if (filtroSucursal.value) {
+    resultado = resultado.filter(m => m.sucursal?.id === filtroSucursal.value)
+  }
   
   if (filtroEstado.value) {
     resultado = resultado.filter(m => m.estado === filtroEstado.value)
@@ -220,10 +253,6 @@ const mantenimientosFiltrados = computed(() => {
   
   if (filtroTipo.value) {
     resultado = resultado.filter(m => m.tipo === filtroTipo.value)
-  }
-
-  if (filtroCliente.value) {
-    resultado = resultado.filter(m => m.cliente?.id === Number(filtroCliente.value))
   }
 
   if (filtroFechaInicio.value) {
@@ -254,7 +283,8 @@ const cargarDatos = async () => {
   try {
     await Promise.all([
       mantenimientosStore.fetchMantenimientos(),
-      clientesStore.fetchClientes()
+      clientesStore.fetchClientes(),
+      sucursalesStore.fetchSucursales()
     ])
   } catch (err) {
     error.value = 'Error al cargar los datos. Por favor, intente nuevamente.'
@@ -271,7 +301,8 @@ const recargarDatos = () => {
 const resetFiltros = () => {
   filtroEstado.value = ''
   filtroTipo.value = ''
-  filtroCliente.value = ''
+  filtroCliente.value = null
+  filtroSucursal.value = null
   filtroFechaInicio.value = ''
   filtroFechaFin.value = ''
 }
