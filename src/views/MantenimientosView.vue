@@ -144,10 +144,10 @@
                 </option>
               </select>
             </div>
-            <div class="form-group sucursal-group">
+            <div class="form-group sucursal-group" v-if="sucursalesFiltradas.length > 0">
               <label>Sucursal</label>
               <div class="sucursal-select-container">
-                <select v-model="newMantenimiento.sucursal_id" @change="handleSucursalChange" required>
+                <select v-model="newMantenimiento.sucursal_id" @change="handleSucursalChange">
                   <option value="">Seleccionar...</option>
                   <option v-for="sucursal in sucursalesFiltradas" :key="sucursal.id" :value="sucursal.id">
                     {{ sucursal.nombre }} - {{ sucursal.direccion }}
@@ -169,6 +169,12 @@
                   {{ disp.modelo }} - {{ disp.numero_serie_display }}
                 </option>
               </select>
+              <small v-if="sucursalesFiltradas.length > 0" class="form-text text-muted">
+                Seleccione una sucursal para ver sus dispensadores
+              </small>
+              <small v-else class="form-text text-muted">
+                Se mostrarán los dispensadores directos del cliente
+              </small>
             </div>
             <div class="form-group">
               <label>Técnico</label>
@@ -228,6 +234,10 @@
             <div class="historial-header">
               <i class="fas fa-history"></i>
               <h3>Último Mantenimiento Realizado</h3>
+              <button class="btn-edit-historial" @click="editUltimoMantenimiento">
+                <i class="fas fa-edit"></i>
+                Editar
+              </button>
             </div>
             <div class="historial-content">
               <div class="historial-item">
@@ -374,27 +384,44 @@ const sucursalesFiltradas = computed(() => {
 
 // Computed para filtrar dispensadores según la sucursal seleccionada
 const dispensadoresFiltrados = computed(() => {
-  if (!newMantenimiento.value.sucursal_id) {
-    console.log('No hay sucursal seleccionada');
+  if (!newMantenimiento.value.cliente_id) {
+    console.log('No hay cliente seleccionado');
     return [];
   }
   
-  console.log('Filtrando dispensadores para sucursal:', newMantenimiento.value.sucursal_id);
-  console.log('Total dispensadores disponibles:', dispensadores.value.length);
+  console.log('Filtrando dispensadores para:', {
+    sucursal_id: newMantenimiento.value.sucursal_id,
+    cliente_id: newMantenimiento.value.cliente_id
+  });
   
   const dispensadoresExpandidos = [];
   
   dispensadores.value.forEach(d => {
-    // Verificar si el dispensador pertenece a la sucursal seleccionada
+    // Verificar si el dispensador pertenece a la sucursal seleccionada o al cliente seleccionado
     const dispensadorSucursalId = d.sucursal_id || (d.sucursal?.id);
-    if (dispensadorSucursalId === newMantenimiento.value.sucursal_id) {
-      // Crear una entrada por cada unidad según la cantidad
-      const cantidad = d.cantidad || 1;
-      for (let i = 0; i < cantidad; i++) {
-        dispensadoresExpandidos.push({
-          ...d,
-          numero_serie_display: `${d.numero_serie} (Unidad ${i + 1} de ${cantidad})`
-        });
+    const dispensadorClienteId = d.cliente_id || (d.sucursal?.cliente_id);
+    
+    if (newMantenimiento.value.sucursal_id) {
+      // Si hay sucursal seleccionada, mostrar solo dispensadores de esa sucursal
+      if (dispensadorSucursalId === newMantenimiento.value.sucursal_id) {
+        const cantidad = d.cantidad || 1;
+        for (let i = 0; i < cantidad; i++) {
+          dispensadoresExpandidos.push({
+            ...d,
+            numero_serie_display: `${d.numero_serie} (Unidad ${i + 1} de ${cantidad})`
+          });
+        }
+      }
+    } else {
+      // Si no hay sucursal seleccionada, mostrar dispensadores directos del cliente
+      if (dispensadorClienteId === newMantenimiento.value.cliente_id && !dispensadorSucursalId) {
+        const cantidad = d.cantidad || 1;
+        for (let i = 0; i < cantidad; i++) {
+          dispensadoresExpandidos.push({
+            ...d,
+            numero_serie_display: `${d.numero_serie} (Unidad ${i + 1} de ${cantidad})`
+          });
+        }
       }
     }
   });
@@ -603,6 +630,19 @@ const closeModal = () => {
 
 const saveMantenimiento = async () => {
   try {
+    // Verificar si el cliente tiene sucursales
+    const clienteTieneSucursales = sucursalesFiltradas.value.length > 0;
+    
+    // Si el cliente tiene sucursales y se ha seleccionado un dispensador sin sucursal,
+    // permitir guardar sin sucursal
+    if (clienteTieneSucursales && !newMantenimiento.value.sucursal_id) {
+      const dispensadorSeleccionado = dispensadores.value.find(d => d.id === newMantenimiento.value.dispensador_id);
+      if (dispensadorSeleccionado?.sucursal_id) {
+        alert('Por favor, seleccione una sucursal para este dispensador');
+        return;
+      }
+    }
+
     if (isEditing.value && editingMantenimientoId.value) {
       await mantenimientosStore.updateMantenimiento(editingMantenimientoId.value, newMantenimiento.value);
     } else {
@@ -612,6 +652,7 @@ const saveMantenimiento = async () => {
     closeModal();
   } catch (error) {
     console.error('Error al guardar mantenimiento:', error);
+    alert('Error al guardar el mantenimiento: ' + error.message);
   }
 };
 
@@ -632,7 +673,15 @@ const getTecnicoNombre = (tecnico: Tecnico | null) => {
 };
 
 const getSucursalDireccion = (sucursalId: number | null) => {
-  if (!sucursalId) return 'Dirección no disponible';
+  if (!sucursalId) {
+    // Si no hay sucursal, buscar el cliente del mantenimiento actual
+    const mantenimientoActual = mantenimientos.value.find(m => m.sucursal_id === sucursalId);
+    if (mantenimientoActual?.cliente_id) {
+      const cliente = clientes.value.find(c => c.id === mantenimientoActual.cliente_id);
+      return cliente?.direccion || 'Dirección no disponible';
+    }
+    return 'Dirección no disponible';
+  }
   const sucursal = sucursales.value.find(s => s.id === sucursalId);
   return sucursal?.direccion || 'Dirección no disponible';
 };
@@ -724,6 +773,12 @@ const deleteSelectedMantenimientos = async () => {
     } catch (error) {
       console.error('Error al eliminar mantenimientos:', error);
     }
+  }
+};
+
+const editUltimoMantenimiento = () => {
+  if (ultimoMantenimiento.value) {
+    editMantenimiento(ultimoMantenimiento.value);
   }
 };
 </script>
@@ -1200,6 +1255,7 @@ const deleteSelectedMantenimientos = async () => {
   gap: 0.5rem;
   margin-bottom: 1rem;
   color: var(--primary-color);
+  justify-content: space-between;
 }
 
 .historial-header i {
@@ -1210,6 +1266,29 @@ const deleteSelectedMantenimientos = async () => {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
+}
+
+.btn-edit-historial {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all 0.2s ease;
+}
+
+.btn-edit-historial:hover {
+  background: var(--primary-color-dark);
+  transform: translateY(-1px);
+}
+
+.btn-edit-historial i {
+  font-size: 0.9rem;
 }
 
 .historial-content {

@@ -112,7 +112,78 @@
               <span>{{ mantenimiento.observaciones }}</span>
             </div>
           </div>
+
+          <div class="card-actions">
+            <button @click="editMantenimiento(mantenimiento)" class="action-btn edit">
+              <i class="fas fa-edit"></i>
+              Editar
+            </button>
+          </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Edición -->
+  <div v-if="showEditModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Editar Mantenimiento</h2>
+        <button class="close-btn" @click="closeEditModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form @submit.prevent="saveEdit" class="edit-form">
+          <div class="form-group">
+            <label>Estado</label>
+            <select v-model="editingMantenimiento.estado" required>
+              <option value="pendiente">Pendiente</option>
+              <option value="en_proceso">En Proceso</option>
+              <option value="completado">Completado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Tipo</label>
+            <select v-model="editingMantenimiento.tipo" required>
+              <option value="preventivo">Preventivo</option>
+              <option value="correctivo">Correctivo</option>
+              <option value="emergencia">Emergencia</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Fecha Programada</label>
+            <input 
+              v-model="editingMantenimiento.fechaProgramada" 
+              type="datetime-local" 
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label>Fecha Realizada</label>
+            <input 
+              v-model="editingMantenimiento.fechaRealizada" 
+              type="datetime-local"
+            >
+          </div>
+
+          <div class="form-group">
+            <label>Descripción</label>
+            <textarea v-model="editingMantenimiento.descripcion" rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Observaciones</label>
+            <textarea v-model="editingMantenimiento.observaciones" rows="3"></textarea>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" @click="closeEditModal">Cancelar</button>
+            <button type="submit" class="btn-primary">Guardar Cambios</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -124,7 +195,9 @@ import { useMantenimientosStore } from '@/stores/mantenimientos.store'
 import { useClientesStore } from '@/stores/clientes.store'
 import { storeToRefs } from 'pinia'
 import type { Mantenimiento } from '@/interfaces/mantenimiento.interface'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const mantenimientosStore = useMantenimientosStore()
 const clientesStore = useClientesStore()
 const { mantenimientos } = storeToRefs(mantenimientosStore)
@@ -233,6 +306,32 @@ const formatTipo = (tipo: string) => {
     emergencia: 'Emergencia'
   }
   return tipos[tipo] || tipo
+}
+
+const showEditModal = ref(false)
+const editingMantenimiento = ref<Mantenimiento | null>(null)
+
+const editMantenimiento = (mantenimiento: Mantenimiento) => {
+  editingMantenimiento.value = { ...mantenimiento }
+  showEditModal.value = true
+}
+
+const closeEditModal = () => {
+  showEditModal.value = false
+  editingMantenimiento.value = null
+}
+
+const saveEdit = async () => {
+  if (!editingMantenimiento.value) return
+
+  try {
+    await mantenimientosStore.updateMantenimiento(editingMantenimiento.value.id, editingMantenimiento.value)
+    await mantenimientosStore.fetchMantenimientos()
+    closeEditModal()
+  } catch (error) {
+    console.error('Error al actualizar mantenimiento:', error)
+    alert('Error al actualizar el mantenimiento. Por favor, intente nuevamente.')
+  }
 }
 </script>
 
@@ -442,5 +541,165 @@ const formatTipo = (tipo: string) => {
   border-color: var(--primary-color);
   outline: none;
   box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.card-actions {
+  padding: 1rem;
+  display: flex;
+  gap: 0.8rem;
+  background: #f8f9fa;
+  border-top: 1px solid #eee;
+  margin-top: 1rem;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 0.8rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.action-btn i {
+  font-size: 1rem;
+}
+
+.action-btn.edit {
+  background: var(--primary-color);
+  color: white;
+}
+
+.action-btn.edit:hover {
+  background: #1a5f7a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+  padding: 1rem;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+}
+
+.modal-body {
+  padding: 1.5rem;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+}
+
+.btn-secondary {
+  background: #f8f9fa;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.btn-primary:hover {
+  background: var(--primary-color-dark);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:hover {
+  background: #e9ecef;
 }
 </style> 

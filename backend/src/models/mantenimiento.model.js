@@ -45,7 +45,7 @@ module.exports = (sequelize) => {
     },
     sucursal_id: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'sucursales',
         key: 'id'
